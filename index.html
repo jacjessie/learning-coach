@@ -20,7 +20,7 @@ body {font-family: Arial; background:#07102a;color:#e6eef8;margin:20px;}
 
 <div class="card">
   <h2>Coach JeetPT</h2>
-  <div>Mode: <span id="modeLabel">User</span><span class="small">— errors will be printed here if Graph calls fail</span></div>
+  <div>Mode: <span id="modeLabel">User</span><span class="small"> — errors will be printed here if Graph calls fail</span></div>
   <div id="chatbox"></div>
   <div class="controls">
     <input id="userInput" placeholder="Ask a question or /learn (admin)" style="flex:1;">
@@ -33,304 +33,71 @@ body {font-family: Arial; background:#07102a;color:#e6eef8;margin:20px;}
 
 <script>
 // ===== CONFIG =====
-const clientId   = '7f3c8426-3ef5-4e28-acf0-5f51224bc0a6';
-const redirectUri= "https://jacjessie.github.io/learning-coach/"; // hardcoded to avoid mismatch
+const clientId   = "7f3c8426-3ef5-4e28-acf0-5f51224bc0a6";
+const redirectUri= "https://jacjessie.github.io/learning-coach/"; // hardcoded to your site root
 const scopes     = "Files.ReadWrite.All User.Read";
+const shareLink  = "https://ceridian-my.sharepoint.com/:x:/g/personal/jessa_catacutan_dayforce_com/ERDPw5Qrw_FPlcclpjXnnS0Bhu7OxHcAbfLDSzArTc6wSg?e=y0r3ZU";
 
-// IMPORTANT: Use a share link the *logged-in* account can open in a private window
-const shareLink  = "https://xvxky-my.sharepoint.com/:x:/g/personal/jacjessie_xvxky_onmicrosoft_com/Ef4Mr6_ZWd1Dm0D6mAe2ffkBiGIOj00iRvJvJACuArT7cQ?e=ZryACq";
+let kb=[], hiddenKb=[], isAdmin=false, adminPassword="admin123";
+let accessToken=null, workbookBase=null;
 
-// ===== STATE =====
-let kb = [], hiddenKb = [], isAdmin = false, adminPassword = 'admin123';
-let accessToken = null;
-let workbookBase = null; // https://graph.microsoft.com/v1.0/drives/{driveId}/items/{itemId}/workbook
-
-// ===== UI =====
+// ===== UI helpers =====
 function addChat(sender,text){
-  const el=document.createElement('div'); el.className='msg '+(sender==='User'?'user':'bot'); el.textContent=(sender==='User'?'You: ':'Bot: ')+text;
-  document.getElementById('chatbox').appendChild(el);
-  document.getElementById('chatbox').scrollTop=document.getElementById('chatbox').scrollHeight;
+  const el=document.createElement("div");
+  el.className="msg "+(sender==="User"?"user":"bot");
+  el.textContent=(sender==="User"?"You: ":"Bot: ")+text;
+  document.getElementById("chatbox").appendChild(el);
+  document.getElementById("chatbox").scrollTop=document.getElementById("chatbox").scrollHeight;
 }
 
-// ===== Helpers: fuzzy =====
-function levenshtein(a,b){if(!a||!b)return a||b?Math.max(a.length,b.length):0;const m=a.length,n=b.length,dp=Array(m+1).fill(0).map(()=>Array(n+1).fill(0));for(let i=0;i<=m;i++)dp[i][0]=i;for(let j=0;j<=n;j++)dp[0][j]=j;for(let i=1;i<=m;i++)for(let j=1;j<=n;j++){const c=a[i-1]===b[j-1]?0:1;dp[i][j]=Math.min(dp[i-1][j]+1,dp[i][j-1]+1,dp[i-1][j-1]+c)}return dp[m][n]}
-function normalizedSimilarity(a,b){const d=levenshtein((a||'').toLowerCase(),(b||'').toLowerCase());const m=Math.max((a||'').length,(b||'').length);return m?1-d/m:1}
-function scoreMatch(q,t){return normalizedSimilarity(q,t)}
-
-// ===== Diagnostics: fetch wrapper & error printer =====
-async function gFetch(url, options={}){
-  const res = await fetch(url, options);
-  if (!res.ok) {
-    let text = "";
-    try { text = await res.text(); } catch(e){}
-    const msg = `HTTP ${res.status} ${res.statusText}\nURL: ${url}\n${text}`;
-    throw new Error(msg);
+// ===== Diagnostics fetch =====
+async function gFetch(url,opt={}){
+  const res=await fetch(url,opt);
+  if(!res.ok){
+    let text=""; try{text=await res.text();}catch(e){}
+    throw new Error(`HTTP ${res.status} ${res.statusText}\nURL: ${url}\n${text}`);
   }
-  const ct = res.headers.get('content-type') || '';
-  if (ct.includes('application/json')) return res.json();
+  const ct=res.headers.get("content-type")||"";
+  if(ct.includes("application/json")) return res.json();
   return res.text();
 }
-function showErrorToChat(err, hint=""){
-  console.error(err);
-  addChat('Bot', `Error:\n${(err && err.message) ? err.message : err}${hint?`\nHint: ${hint}`:''}`);
-}
+function showErrorToChat(err,hint=""){ console.error(err); addChat("Bot",`Error:\n${err.message||err}${hint?`\nHint: ${hint}`:""}`); }
 
 // ===== OAuth =====
 function loginMicrosoftGraph(){
-  const tenant="common"; // or a specific tenant GUID if you want to force a tenant
-  const authUrl = `https://login.microsoftonline.com/${tenant}/oauth2/v2.0/authorize?client_id=${clientId}&response_type=token&redirect_uri=${encodeURIComponent(redirectUri)}&scope=${encodeURIComponent(scopes)}`;
-  window.location.href = authUrl;
+  const tenant="common"; // multi-tenant
+  const params=new URLSearchParams({
+    client_id:clientId,
+    response_type:"token",
+    redirect_uri:redirectUri,
+    scope:scopes,
+    prompt:"select_account"
+  });
+  window.location.href=`https://login.microsoftonline.com/${tenant}/oauth2/v2.0/authorize?${params}`;
 }
 function getTokenFromHash(){
   if(window.location.hash){
-    const hash = window.location.hash.substring(1);
-    const params = new URLSearchParams(hash);
-    const token = params.get('access_token');
-    if (token){ accessToken = token; window.location.hash=''; fetchExcelKB(); }
+    const p=new URLSearchParams(window.location.hash.substring(1));
+    const t=p.get("access_token");
+    if(t){ accessToken=t; window.location.hash=""; fetchExcelKB(); }
   }
 }
 
-// ===== Resolve file to workbook base =====
-function toBase64Url(u){ let s=btoa(u).replace(/=+$/,'').replace(/\+/g,'-').replace(/\//g,'_'); return s; }
+// ===== File resolution =====
+function toBase64Url(u){ return btoa(u).replace(/=+$/,"").replace(/\+/g,"-").replace(/\//g,"_"); }
 async function resolveWorkbookBase(){
-  if (workbookBase) return;
-  try {
-    const encoded = toBase64Url(shareLink);
-    const item = await gFetch(`https://graph.microsoft.com/v1.0/shares/${encoded}/driveItem`, {
-      headers: { Authorization: 'Bearer ' + accessToken }
-    });
-    const driveId = item.parentReference.driveId;
-    const itemId  = item.id;
-    workbookBase  = `https://graph.microsoft.com/v1.0/drives/${driveId}/items/${itemId}/workbook`;
-  } catch (err){
-    showErrorToChat(err, "Check that the signed-in account can open this share link. If not, re-share the file to this account.");
-    throw err;
-  }
+  if(workbookBase) return;
+  try{
+    const encoded=toBase64Url(shareLink);
+    const item=await gFetch(`https://graph.microsoft.com/v1.0/shares/${encoded}/driveItem`,{headers:{Authorization:"Bearer "+accessToken}});
+    workbookBase=`https://graph.microsoft.com/v1.0/drives/${item.parentReference.driveId}/items/${item.id}/workbook`;
+  }catch(e){showErrorToChat(e,"Check file sharing. Make sure this account can open the share link.");throw e;}
 }
 
-// ===== Read helpers =====
-async function readKnowledgeRows(){
-  try {
-    // prefer KnowledgeTable
-    const tData = await gFetch(`${workbookBase}/tables`, { headers: { Authorization:'Bearer '+accessToken } });
-    const t = (tData.value||[]).find(x => (x.name||'').toLowerCase()==='knowledgetable');
-    if (t){
-      const rowsData = await gFetch(`${workbookBase}/tables('${t.name}')/rows`, { headers: { Authorization:'Bearer '+accessToken } });
-      const rows = (rowsData.value||[]).map(r => (r.values && r.values[0] && r.values[0][0]) ? String(r.values[0][0]).trim() : '').filter(Boolean);
-      return rows;
-    }
-    // fallback to range
-    const data = await gFetch(`${workbookBase}/worksheets('Knowledge')/range(address='A2:A20000')`, { headers:{ Authorization:'Bearer '+accessToken } });
-    const vals = Array.isArray(data.values) ? data.values : [];
-    return vals.map(r => (r && r[0] ? String(r[0]).trim() : '')).filter(Boolean);
-  } catch (err){
-    showErrorToChat(err, "Sheet name must be 'Knowledge'. Ensure A1 header is 'Knowledge'. If 404, table/sheet missing; if 403, permission.");
-    return [];
-  }
-}
-async function readAdminPassword(){
-  try {
-    // AdminTable first
-    const tData = await gFetch(`${workbookBase}/tables`, { headers: { Authorization:'Bearer '+accessToken } });
-    const t = (tData.value||[]).find(x => (x.name||'').toLowerCase()==='admintable');
-    if (t){
-      const rowsData = await gFetch(`${workbookBase}/tables('${t.name}')/rows`, { headers:{ Authorization:'Bearer '+accessToken } });
-      const first = rowsData.value && rowsData.value[0] && rowsData.value[0].values && rowsData.value[0].values[0] ? rowsData.value[0].values[0][0] : null;
-      if (first) return String(first);
-    }
-    // fallback A1/A2
-    const a1 = await gFetch(`${workbookBase}/worksheets('Admin')/range(address='A1')`, { headers:{ Authorization:'Bearer '+accessToken } });
-    const v1 = a1.values && a1.values[0] && a1.values[0][0] ? String(a1.values[0][0]) : '';
-    if (v1 && v1.toLowerCase()!=='password') return v1;
-    const a2 = await gFetch(`${workbookBase}/worksheets('Admin')/range(address='A2')`, { headers:{ Authorization:'Bearer '+accessToken } });
-    const v2 = a2.values && a2.values[0] && a2.values[0][0] ? String(a2.values[0][0]) : '';
-    return v2 || 'admin123';
-  } catch(err){
-    showErrorToChat(err, "Sheet name must be 'Admin'. Put 'Password' in A1 and the actual password in A2 if you don't use AdminTable.");
-    return 'admin123';
-  }
-}
+// ===== Knowledge/Admin read/write (trimmed for brevity, same logic as diagnostics build) =====
+// ... keep your functions for readKnowledgeRows, readAdminPassword, fetchExcelKB, ensureKnowledgeTable, appendKnowledgeToExcel, ensureAdminTable, updateAdminPassword here ...
 
-// ===== Fetch Excel (entry) =====
-async function fetchExcelKB(){
-  if (!accessToken) return;
-  try {
-    await resolveWorkbookBase();
-    const knowledgeTexts = await readKnowledgeRows();
-    kb = knowledgeTexts.map(text => ({ text }));
-    adminPassword = await readAdminPassword();
-    addChat('Bot','Excel KB loaded from OneDrive.');
-  } catch (err){
-    showErrorToChat(err, "If this persists: verify API permissions (Files.ReadWrite.All, User.Read + admin consent), and file sharing.");
-  }
-}
-
-// ===== Write: Knowledge via Table =====
-async function ensureKnowledgeTable(){
-  await resolveWorkbookBase();
-  try {
-    const tData = await gFetch(`${workbookBase}/tables`, { headers:{ Authorization:'Bearer '+accessToken } });
-    let t = (tData.value||[]).find(x => (x.name||'').toLowerCase()==='knowledgetable');
-    if (!t){
-      const added = await gFetch(`${workbookBase}/tables/add`, {
-        method:'POST',
-        headers:{ Authorization:'Bearer '+accessToken, 'Content-Type':'application/json' },
-        body: JSON.stringify({ address:"Knowledge!A1:A1", hasHeaders:true })
-      });
-      // set header
-      try {
-        await gFetch(`${workbookBase}/worksheets('Knowledge')/range(address='A1')`, {
-          method:'PATCH',
-          headers:{ Authorization:'Bearer '+accessToken, 'Content-Type':'application/json' },
-          body: JSON.stringify({ values:[["Knowledge"]] })
-        });
-      } catch(e){ /* non-fatal */ }
-      // rename
-      try {
-        await gFetch(`${workbookBase}/tables('${added.id}')`, {
-          method:'PATCH',
-          headers:{ Authorization:'Bearer '+accessToken, 'Content-Type':'application/json' },
-          body: JSON.stringify({ name:"KnowledgeTable" })
-        });
-      } catch(e){ /* non-fatal */ }
-      t = { name:"KnowledgeTable" };
-    }
-    return t;
-  } catch (err){
-    showErrorToChat(err, "Could not ensure KnowledgeTable. Check sheet name and permissions.");
-    throw err;
-  }
-}
-async function appendKnowledgeToExcel(text){
-  try {
-    const t = await ensureKnowledgeTable();
-    await gFetch(`${workbookBase}/tables('${t.name}')/rows/add`, {
-      method:'POST',
-      headers:{ Authorization:'Bearer '+accessToken, 'Content-Type':'application/json' },
-      body: JSON.stringify({ values:[[text]] })
-    });
-    addChat('Bot','Knowledge saved to Excel Online.');
-  } catch (err){
-    showErrorToChat(err, "If 401/403, consent/permissions. If 404, table/sheet missing. If 423, file locked.");
-  }
-}
-
-// ===== Write: Admin password via AdminTable =====
-async function ensureAdminTable(){
-  await resolveWorkbookBase();
-  try {
-    const tData = await gFetch(`${workbookBase}/tables`, { headers:{ Authorization:'Bearer '+accessToken } });
-    let t = (tData.value||[]).find(x => (x.name||'').toLowerCase()==='admintable');
-    if (!t){
-      const added = await gFetch(`${workbookBase}/tables/add`, {
-        method:'POST',
-        headers:{ Authorization:'Bearer '+accessToken, 'Content-Type':'application/json' },
-        body: JSON.stringify({ address:"Admin!A1:A1", hasHeaders:true })
-      });
-      await gFetch(`${workbookBase}/worksheets('Admin')/range(address='A1')`, {
-        method:'PATCH',
-        headers:{ Authorization:'Bearer '+accessToken, 'Content-Type':'application/json' },
-        body: JSON.stringify({ values:[["Password"]] })
-      });
-      try {
-        await gFetch(`${workbookBase}/tables('${added.id}')`, {
-          method:'PATCH',
-          headers:{ Authorization:'Bearer '+accessToken, 'Content-Type':'application/json' },
-          body: JSON.stringify({ name:"AdminTable" })
-        });
-      } catch(e){}
-      t = { name:"AdminTable" };
-    }
-    return t;
-  } catch (err){
-    showErrorToChat(err, "Could not ensure AdminTable. Check 'Admin' sheet exists.");
-    throw err;
-  }
-}
-async function updateAdminPassword(newPwd){
-  try {
-    const t = await ensureAdminTable();
-    // clear rows (keep header)
-    await gFetch(`${workbookBase}/tables('${t.name}')/rows`, {
-      method:'DELETE',
-      headers:{ Authorization:'Bearer '+accessToken }
-    });
-    await gFetch(`${workbookBase}/tables('${t.name}')/rows/add`, {
-      method:'POST',
-      headers:{ Authorization:'Bearer '+accessToken, 'Content-Type':'application/json' },
-      body: JSON.stringify({ values:[[newPwd]] })
-    });
-    adminPassword = newPwd;
-    addChat('Bot','Admin password updated in Excel.');
-  } catch (err){
-    showErrorToChat(err, "Failed to update Admin password. Check Admin sheet / AdminTable / permissions.");
-  }
-}
-
-// ===== Search =====
-function searchKB(query){
-  const pool=[...kb]; if(isAdmin) pool.push(...hiddenKb);
-  const scored = pool.map(k=>({item:k, score:scoreMatch(query,k.text)}))
-                     .sort((a,b)=>b.score-a.score)
-                     .filter(s=>s.score>0)
-                     .slice(0,5);
-  return scored;
-}
-function composeReply(query){
-  const hits=searchKB(query);
-  if(hits.length===0) return 'No relevant info found.';
-  let reply='Top matches:\n';
-  hits.forEach((h,i)=> reply += `${i+1}. ${h.item.text}\n`);
-  return reply;
-}
-
-// ===== Input handlers =====
-document.getElementById('sendBtn').addEventListener('click',handleInput);
-document.getElementById('userInput').addEventListener('keydown',e=>{ if(e.key==='Enter') handleInput(); });
-document.getElementById('reloadBtn').addEventListener('click', ()=> {
-  if (!accessToken) return addChat('Bot','Please login first (Admin Login).');
-  fetchExcelKB();
-});
-document.getElementById('switchBtn').addEventListener('click', ()=>{
-  accessToken=null; workbookBase=null;
-  addChat('Bot','Token cleared. Click Admin Login to sign in with another account/tenant.');
-});
-
-async function handleInput(){
-  const val=document.getElementById('userInput').value.trim(); if(!val) return; document.getElementById('userInput').value='';
-  addChat('User',val);
-
-  if(isAdmin && val.startsWith('/learn ')){
-    const newText = val.slice(7).trim();
-    if(!newText) return addChat('Bot','Nothing to learn.');
-    hiddenKb.push({text:newText});
-    addChat('Bot','Adding knowledge to OneDrive…');
-    await appendKnowledgeToExcel(newText);
-    await fetchExcelKB(); // refresh list after write
-    return;
-  }
-
-  addChat('Bot', composeReply(val));
-}
-
-// ===== Admin toggle =====
-document.getElementById('adminToggleBtn').addEventListener('click', async ()=>{
-  if(isAdmin){
-    isAdmin=false; document.getElementById('modeLabel').textContent='User'; addChat('Bot','Switched to User mode.'); return;
-  }
-  if(!accessToken){ loginMicrosoftGraph(); return; }
-  if(!workbookBase){ await fetchExcelKB(); } // also loads adminPassword
-  const pwd = prompt('Enter Admin Password:');
-  if(pwd===adminPassword){
-    isAdmin=true; document.getElementById('modeLabel').textContent='Admin'; addChat('Bot','Admin mode unlocked!');
-  } else {
-    alert('Wrong password.');
-  }
-});
-
-// ===== On load =====
-getTokenFromHash();
+// (to save space, I didn’t inline them again since you already have the diagnostic version. Just replace your loginMicrosoftGraph with this new one.)
 </script>
 </body>
 </html>
-
