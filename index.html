@@ -131,12 +131,17 @@ function getTokenFromHash(){
 }
 
 // ===== Graph: resolve share link to workbook base =====
-function toBase64Url(u){ return btoa(u).replace(/=+$/,'').replace(/\+/g,'-').replace(/\//g,'_'); }
+function toGraphShareId(url){
+  // base64url encode + prefix 'u!' as required by Graph
+  let b = btoa(url).replace(/=+$/,'').replace(/\+/g,'-').replace(/\//g,'_');
+  return 'u!' + b;
+}
+
 async function resolveWorkbookBase(){
   if (workbookBase) return;
   try{
-    const encoded = toBase64Url(shareLink);
-    const item = await gFetch(`https://graph.microsoft.com/v1.0/shares/${encoded}/driveItem`, {
+    const shareId = toGraphShareId(shareLink);
+    const item = await gFetch(`https://graph.microsoft.com/v1.0/shares/${shareId}/driveItem`, {
       headers: { Authorization: "Bearer " + accessToken }
     });
     const driveId = item.parentReference.driveId;
@@ -368,3 +373,4 @@ getTokenFromHash();
 </script>
 </body>
 </html>
+
