@@ -4,7 +4,6 @@
 <meta charset="UTF-8">
 <title>Coach JeetPT</title>
 <script src="https://cdn.jsdelivr.net/npm/xlsx/dist/xlsx.full.min.js"></script>
-<!-- PDF.js (client-only parsing) -->
 <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js"></script>
 <style>
@@ -51,16 +50,16 @@ const redirectUri = "https://jacjessie.github.io/learning-coach/"; // your site 
 const scopes      = "Files.ReadWrite.All User.Read";
 
 // IMPORTANT: Use a share link the *signed-in* account can open
-const shareLink   = "https://xvxky-my.sharepoint.com/:x:/g/personal/jacjessie_xvxky_onmicrosoft_com/Ef4Mr6_ZWd1Dm0D6mAe2ffkBI4syJuD6xhj-ekpItxdyXw?e=Q0OVwk";
+const shareLink   = "https://ceridian-my.sharepoint.com/:x:/g/personal/jessa_catacutan_dayforce_com/ERDPw5Qrw_FPlcclpjXnnS0Bhu7OxHcAbfLDSzArTc6wSg?e=y0r3ZU";
 
 // ===== STATE =====
-let kb = [];               // from Excel (public knowledge rows)
-let hiddenKb = [];         // session-only (/learn)
-let docKb = [];            // extracted from uploaded PDFs: {text, source:'PDF', page}
+let kb = [];               // Excel knowledge rows
+let hiddenKb = [];         // session-only admin-added entries
+let docKb = [];            // PDF chunks [{text, source:'PDF', page}]
 let isAdmin = false;
 
-// Back-compat variables (will be set from Excel)
-let adminPassword = "admin123"; // legacy plaintext fallback
+// Back-compat + hashed secret
+let adminPassword = "admin123"; // only used/displayed if plain mode
 let adminSecret   = { mode: "plain", plain: "admin123" }; // or {mode:"hashed", hashB64, saltB64, kdf}
 
 let accessToken = null;
@@ -75,11 +74,23 @@ function addChat(sender, text){
   box.appendChild(el); box.scrollTop = box.scrollHeight;
 }
 function setAdminUI(){
+  const btn = document.getElementById("uploadPdfBtn");
+  const tag = document.getElementById("pdfCount");
   document.getElementById("modeLabel").textContent = isAdmin ? "Admin" : "User";
-  document.getElementById("uploadPdfBtn").classList.toggle("hidden", !isAdmin);
-  document.getElementById("pdfCount").classList.toggle("hidden", docKb.length===0);
+
   if (isAdmin){
+    btn.classList.remove("hidden");
+    btn.style.display = "inline-block";
+    if (docKb.length > 0) {
+      tag.textContent = `PDF: ${docKb.length}`;
+      tag.classList.remove("hidden");
+      tag.style.display = "inline-block";
+    }
     addChat("Bot","Admin mode unlocked! Commands:\n- /learn <text>  → add knowledge to OneDrive\n- /passwd <new> → change admin password (hashed)\n- Reload KB     → re-fetch latest data from OneDrive\n- Upload PDF    → add Dayforce Implementation Guide for fallback");
+  } else {
+    tag.classList.toggle("hidden", docKb.length===0);
+    btn.classList.add("hidden");
+    btn.style.display = "none";
   }
 }
 
@@ -103,8 +114,7 @@ function normalizedSimilarity(a,b){
 function scoreMatch(q,t){ return normalizedSimilarity(q,t); }
 
 function searchKB(query){
-  const pool = [...kb, ...docKb]; // Excel + PDF fallback
-  if (isAdmin) pool.push(...hiddenKb);
+  const pool = [...kb, ...docKb]; if(isAdmin) pool.push(...hiddenKb);
   const scored = pool.map(k=>({ item:k, score:scoreMatch(query, k.text) }))
                      .sort((a,b)=>b.score-a.score)
                      .filter(x=>x.score>0)
@@ -114,7 +124,7 @@ function searchKB(query){
 function composeReply(query){
   const hits=searchKB(query);
   if(hits.length===0){
-    return "No relevant info found locally. Try searching Dayforce Help: https://help.dayforce.com/";
+    return "No relevant info found locally. Try Dayforce Help: https://help.dayforce.com/";
   }
   let reply="Top matches:\n";
   hits.forEach((h,i)=>{
@@ -142,7 +152,7 @@ function showErrorToChat(err, hint=""){
 
 // ===== OAuth (multi-tenant) =====
 function loginMicrosoftGraph(){
-  const tenant = "common"; // app configured as multi-tenant in Azure
+  const tenant = "common";
   const params = new URLSearchParams({
     client_id: clientId,
     response_type: "token",
@@ -182,7 +192,7 @@ async function resolveWorkbookBase(){
   }
 }
 
-// ===== Crypto helpers for hashed password =====
+// ===== Crypto helpers (PBKDF2-SHA256) =====
 function b64enc(arrBuf) { const bytes = new Uint8Array(arrBuf); let bin = ""; for (let i=0;i<bytes.length;i++) bin += String.fromCharCode(bytes[i]); return btoa(bin); }
 function b64dec(b64) { const bin = atob(b64); const bytes = new Uint8Array(bin.length); for (let i=0;i<bin.length;i++) bytes[i] = bin.charCodeAt(i); return bytes.buffer; }
 function randomSalt(len = 16) { const buf = new Uint8Array(len); crypto.getRandomValues(buf); return b64enc(buf.buffer); }
@@ -360,11 +370,11 @@ document.getElementById("pdfInput").addEventListener("change", async (e)=>{
       const tc = await page.getTextContent();
       const pageText = tc.items.map(it=>it.str).join(" ").replace(/\s+/g," ").trim();
 
-      // Chunking: split into ~500-char chunks with small overlap for better hits
+      // chunk into ~500 chars with overlap
       const chunkSize=500, overlap=80;
-      for(let i=0;i<pageText.length;i+= (chunkSize - overlap)){
+      for(let i=0;i<pageText.length;i+=(chunkSize-overlap)){
         const chunk = pageText.slice(i, i+chunkSize).trim();
-        if(chunk.length>60){ // keep meaningful chunks
+        if(chunk.length>60){
           docKb.push({ text: chunk, source: 'PDF', page: p });
           extracted++;
         }
@@ -374,9 +384,9 @@ document.getElementById("pdfInput").addEventListener("change", async (e)=>{
     document.getElementById("pdfCount").classList.remove("hidden");
     addChat("Bot", `PDF parsed. Added ${extracted} text chunks for fallback search.`);
   }catch(err){
-    showErrorToChat(err, "Failed to parse PDF. Ensure the file is a standard text-based PDF (not scanned).");
+    showErrorToChat(err, "Failed to parse PDF. Ensure the file is text-based (not scanned).");
   }finally{
-    e.target.value = ""; // reset input
+    e.target.value = "";
   }
 });
 
@@ -415,7 +425,7 @@ async function handleInput(){
     return;
   }
 
-  // Normal search (Excel + PDF fallback)
+  // Search (Excel + PDF fallback)
   addChat("Bot", composeReply(val));
 }
 
@@ -430,7 +440,8 @@ document.getElementById("adminToggleBtn").addEventListener("click", async ()=>{
   const pwd = prompt("Enter Admin Password:");
   const ok  = await verifyAdminPassword(pwd);
   if (ok){
-    isAdmin = true; setAdminUI();
+    isAdmin = true;
+    setAdminUI(); // ensure Upload PDF button appears
   } else {
     alert("Wrong password.");
   }
