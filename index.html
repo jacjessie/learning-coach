@@ -39,13 +39,17 @@ const redirectUri = "https://jacjessie.github.io/learning-coach/"; // your site 
 const scopes      = "Files.ReadWrite.All User.Read";
 
 // IMPORTANT: Use a share link the *signed-in* account can open
-const shareLink   = "https://xvxky-my.sharepoint.com/:x:/g/personal/jacjessie_xvxky_onmicrosoft_com/Ef4Mr6_ZWd1Dm0D6mAe2ffkBI4syJuD6xhj-ekpItxdyXw?e=UwKP9w";
+const shareLink   = "https://ceridian-my.sharepoint.com/:x:/g/personal/jessa_catacutan_dayforce_com/ERDPw5Qrw_FPlcclpjXnnS0Bhu7OxHcAbfLDSzArTc6wSg?e=y0r3ZU";
 
 // ===== STATE =====
 let kb = [];               // public knowledge rows
 let hiddenKb = [];         // session-only entries (also saved to Excel via /learn)
 let isAdmin = false;
-let adminPassword = "admin123";
+
+// Back-compat variables (will be set from Excel)
+let adminPassword = "admin123"; // legacy plaintext (only used if Excel is in plain mode)
+let adminSecret   = { mode: "plain", plain: "admin123" }; // {mode:"plain",plain:"..."} or {mode:"hashed",hashB64:"...",saltB64:"...",kdf:"..."}
+
 let accessToken = null;
 let workbookBase = null;   // https://graph.microsoft.com/v1.0/drives/{driveId}/items/{itemId}/workbook
 
@@ -151,6 +155,38 @@ async function resolveWorkbookBase(){
   }
 }
 
+// ===== Crypto helpers for hashed password =====
+function b64enc(arrBuf) {
+  const bytes = new Uint8Array(arrBuf);
+  let bin = "";
+  for (let i = 0; i < bytes.length; i++) bin += String.fromCharCode(bytes[i]);
+  return btoa(bin);
+}
+function b64dec(b64) {
+  const bin = atob(b64);
+  const bytes = new Uint8Array(bin.length);
+  for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+  return bytes.buffer;
+}
+function randomSalt(len = 16) {
+  const buf = new Uint8Array(len);
+  crypto.getRandomValues(buf);
+  return b64enc(buf.buffer);
+}
+async function pbkdf2(password, saltB64, iterations = 100000, length = 32) {
+  const enc = new TextEncoder();
+  const keyMaterial = await crypto.subtle.importKey(
+    "raw", enc.encode(password), { name: "PBKDF2" }, false, ["deriveBits"]
+  );
+  const salt = b64dec(saltB64);
+  const bits = await crypto.subtle.deriveBits(
+    { name: "PBKDF2", hash: "SHA-256", salt, iterations },
+    keyMaterial,
+    length * 8
+  );
+  return b64enc(bits); // base64 derived key
+}
+
 // ===== READ: Knowledge (prefer table; fallback range) =====
 async function readKnowledgeRows(){
   try{
@@ -173,29 +209,59 @@ async function readKnowledgeRows(){
   }
 }
 
-// ===== READ: Admin password (direct cells) =====
-async function readAdminPassword(){
+// ===== READ: Admin secret (hashed preferred; plaintext fallback) =====
+async function readAdminSecret(){
   try{
     await resolveWorkbookBase();
-    // Prefer A2 (actual value)
-    const a2 = await gFetch(`${workbookBase}/worksheets('Admin')/range(address='A2')`, {
+
+    // Try hashed layout first: A1:C2 -> [PasswordHash, Salt, Kdf] / [hash, salt, desc]
+    const r = await gFetch(`${workbookBase}/worksheets('Admin')/range(address='A1:C2')`, {
       headers: { Authorization:'Bearer '+accessToken }
     });
-    const v2 = a2.values && a2.values[0] && a2.values[0][0] ? String(a2.values[0][0]) : '';
-    if (v2) return v2;
+    const grid = r.values || [];
+    const a1 = (grid[0] && grid[0][0]) ? String(grid[0][0]) : "";
+    const b1 = (grid[0] && grid[0][1]) ? String(grid[0][1]) : "";
+    const c1 = (grid[0] && grid[0][2]) ? String(grid[0][2]) : "";
+    const a2 = (grid[1] && grid[1][0]) ? String(grid[1][0]) : "";
+    const b2 = (grid[1] && grid[1][1]) ? String(grid[1][1]) : "";
+    const c2 = (grid[1] && grid[1][2]) ? String(grid[1][2]) : "";
 
-    // Fallback to A1 (if someone stored it there)
-    const a1 = await gFetch(`${workbookBase}/worksheets('Admin')/range(address='A1')`, {
+    if (a1 === "PasswordHash" && b1 === "Salt" && c1 === "Kdf" && a2 && b2 && c2) {
+      return { mode:"hashed", hashB64:a2, saltB64:b2, kdf:c2 };
+    }
+
+    // Fallback to plaintext in A2 (preferred) or A1 if present
+    const a2PlainRes = await gFetch(`${workbookBase}/worksheets('Admin')/range(address='A2')`, {
       headers: { Authorization:'Bearer '+accessToken }
     });
-    const v1 = a1.values && a1.values[0] && a1.values[0][0] ? String(a1.values[0][0]) : '';
-    if (v1 && v1.toLowerCase() !== 'password') return v1;
+    const v2 = a2PlainRes.values && a2PlainRes.values[0] && a2PlainRes.values[0][0] ? String(a2PlainRes.values[0][0]) : '';
+    if (v2) return { mode:"plain", plain:v2 };
 
-    return 'admin123';
+    const a1PlainRes = await gFetch(`${workbookBase}/worksheets('Admin')/range(address='A1')`, {
+      headers: { Authorization:'Bearer '+accessToken }
+    });
+    const v1 = a1PlainRes.values && a1PlainRes.values[0] && a1PlainRes.values[0][0] ? String(a1PlainRes.values[0][0]) : '';
+    if (v1 && v1.toLowerCase()!=='password') return { mode:"plain", plain:v1 };
+
+    return { mode:"plain", plain:"admin123" };
   }catch(err){
-    showErrorToChat(err, "Could not read Admin!A2/A1. Ensure the 'Admin' sheet exists and the file isn’t locked.");
-    return 'admin123';
+    showErrorToChat(err, "Could not read Admin sheet for password/secret.");
+    return { mode:"plain", plain:"admin123" };
   }
+}
+
+// ===== VERIFY: Admin password input against secret =====
+async function verifyAdminPassword(input){
+  if (adminSecret.mode === "plain") {
+    return input === adminSecret.plain;
+  }
+  // hashed mode
+  const { saltB64, hashB64, kdf } = adminSecret;
+  if (!saltB64 || !hashB64 || !kdf) return false;
+  const parts = kdf.split("-");
+  const iterations = parts[0] === "PBKDF2" ? (parseInt(parts[1],10) || 100000) : 100000;
+  const derivedB64 = await pbkdf2(input, saltB64, iterations, 32);
+  return derivedB64 === hashB64;
 }
 
 // ===== FETCH (entry) =====
@@ -205,7 +271,10 @@ async function fetchExcelKB(){
     await resolveWorkbookBase();
     const knowledgeTexts = await readKnowledgeRows();
     kb = knowledgeTexts.map(text => ({ text }));
-    adminPassword = await readAdminPassword();
+
+    adminSecret = await readAdminSecret();
+    adminPassword = (adminSecret.mode === "plain") ? adminSecret.plain : "(hashed)";
+
     addChat("Bot","Excel KB loaded from OneDrive.");
   }catch(err){
     showErrorToChat(err, "If this persists: verify API permissions (Files.ReadWrite.All, User.Read + admin consent), and file sharing.");
@@ -262,30 +331,34 @@ async function appendKnowledgeToExcel(text){
   }
 }
 
-// ===== WRITE: Admin password (direct cells) =====
+// ===== WRITE: Admin password (hashed) =====
 async function updateAdminPassword(newPwd){
   try {
     await resolveWorkbookBase();
-    // Ensure header exists (A1 = "Password") – non-fatal if it fails
-    try {
-      await gFetch(`${workbookBase}/worksheets('Admin')/range(address='A1')`, {
-        method: 'PATCH',
-        headers: { Authorization:'Bearer '+accessToken, 'Content-Type':'application/json' },
-        body: JSON.stringify({ values: [["Password"]] })
-      });
-    } catch(e){ /* ignore header failures */ }
 
-    // Write the actual password to A2
-    await gFetch(`${workbookBase}/worksheets('Admin')/range(address='A2')`, {
+    // Generate salt and derive hash
+    const saltB64   = randomSalt(16);
+    const derivedB64= await pbkdf2(newPwd, saltB64, 100000, 32);
+    const kdfDesc   = "PBKDF2-100000-SHA256-32";
+
+    // Write header row (A1:C1)
+    await gFetch(`${workbookBase}/worksheets('Admin')/range(address='A1:C1')`, {
       method: 'PATCH',
       headers: { Authorization:'Bearer '+accessToken, 'Content-Type':'application/json' },
-      body: JSON.stringify({ values: [[newPwd]] })
+      body: JSON.stringify({ values: [["PasswordHash","Salt","Kdf"]] })
     });
 
-    adminPassword = newPwd;
-    addChat("Bot","Admin password updated in Excel.");
+    // Write values row (A2:C2)
+    await gFetch(`${workbookBase}/worksheets('Admin')/range(address='A2:C2')`, {
+      method: 'PATCH',
+      headers: { Authorization:'Bearer '+accessToken, 'Content-Type':'application/json' },
+      body: JSON.stringify({ values: [[derivedB64, saltB64, kdfDesc]] })
+    });
+
+    adminSecret = { mode:"hashed", hashB64:derivedB64, saltB64, kdf:kdfDesc };
+    addChat("Bot","Admin password updated (hashed) in Excel.");
   } catch (err) {
-    showErrorToChat(err, "Could not write Admin!A2. Ensure the 'Admin' sheet exists and the file isn’t locked.");
+    showErrorToChat(err, "Failed to write hashed password. Ensure 'Admin' sheet exists and file isn’t locked.");
   }
 }
 
@@ -336,11 +409,12 @@ document.getElementById("adminToggleBtn").addEventListener("click", async ()=>{
     return;
   }
   if (!accessToken){ loginMicrosoftGraph(); return; }
-  if (!workbookBase){ await fetchExcelKB(); } // also loads adminPassword
+  if (!workbookBase){ await fetchExcelKB(); } // also loads adminSecret
   const pwd = prompt("Enter Admin Password:");
-  if (pwd === adminPassword){
+  const ok  = await verifyAdminPassword(pwd);
+  if (ok){
     isAdmin = true; document.getElementById("modeLabel").textContent="Admin";
-    addChat("Bot","Admin mode unlocked! (Use /learn ... or /passwd ...)");
+    addChat("Bot","Admin mode unlocked! Commands:\n- /learn <text>  → add knowledge to OneDrive\n- /passwd <new> → change admin password (hashed)\n- Reload KB     → re-fetch latest data from OneDrive");
   } else {
     alert("Wrong password.");
   }
