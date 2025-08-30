@@ -1,0 +1,175 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Learning Coach OneDrive Demo</title>
+<script src="https://cdn.jsdelivr.net/npm/xlsx/dist/xlsx.full.min.js"></script>
+<style>
+body {font-family: Arial; background:#07102a;color:#e6eef8;margin:20px;}
+.card{background:#0b1220;padding:14px;border-radius:10px;margin-bottom:20px;}
+#chatbox{height:400px;overflow:auto;border:1px solid rgba(255,255,255,0.03);padding:8px;border-radius:6px;display:flex;flex-direction:column;}
+.msg{margin:6px 0;padding:6px;border-radius:6px;max-width:80%;}
+.user{background:rgba(99,102,241,0.15);align-self:flex-end;}
+.bot{background:rgba(255,255,255,0.03);align-self:flex-start;}
+.controls{display:flex;gap:8px;margin-top:8px;}
+.btn{background:#7c3aed;border:none;padding:6px 12px;border-radius:6px;color:white;cursor:pointer;}
+</style>
+</head>
+<body>
+
+<div class="card">
+<h2>Learning Coach Chat</h2>
+<div>Mode: <span id="modeLabel">User</span></div>
+<div id="chatbox"></div>
+<div class="controls">
+<input id="userInput" placeholder="Ask a question or /learn (admin)" style="flex:1;">
+<button id="sendBtn" class="btn">Send</button>
+<button id="adminToggleBtn" class="btn">Admin Login</button>
+</div>
+</div>
+
+<script>
+// ===== CONFIG =====
+const clientId = '7f3c8426-3ef5-4e28-acf0-5f51224bc0a6';
+const redirectUri = window.location.origin + window.location.pathname;
+const scopes = "Files.ReadWrite.All User.Read";
+
+// OneDrive Excel path (remove ?e=… for API)
+const oneDriveFilePath = "/drive/root:/personal/jessa_catacutan_dayforce_com/Documents/ERDPw5Qrw_FPlcclpjXnnS0Bhu7OxHcAbfLDSzArTc6wSg.xlsx";
+
+// ===== STATE =====
+let kb=[], hiddenKb=[], isAdmin=false, adminPassword='admin123';
+let accessToken = null;
+
+// ===== UTILS =====
+function addChat(sender,text){
+    const el=document.createElement('div'); el.className='msg '+(sender==='User'?'user':'bot'); el.textContent=(sender==='User'?'You: ':'Bot: ')+text;
+    document.getElementById('chatbox').appendChild(el);
+    document.getElementById('chatbox').scrollTop=document.getElementById('chatbox').scrollHeight;
+}
+
+function levenshtein(a,b){
+  if(!a||!b)return(a||b)?Math.max(a.length,b.length):0;
+  const m=a.length,n=b.length,dp=Array(m+1).fill(0).map(()=>Array(n+1).fill(0));
+  for(let i=0;i<=m;i++)dp[i][0]=i; for(let j=0;j<=n;j++)dp[0][j]=j;
+  for(let i=1;i<=m;i++)for(let j=1;j<=n;j++){
+    const cost=a[i-1]===b[j-1]?0:1;
+    dp[i][j]=Math.min(dp[i-1][j]+1,dp[i][j-1]+1,dp[i-1][j-1]+cost);
+  } return dp[m][n];
+}
+function normalizedSimilarity(a,b){ const dist=levenshtein(a,b); return Math.max(a.length,b.length)?1-dist/Math.max(a.length,b.length):1; }
+function scoreMatch(q,text){ return normalizedSimilarity(q,text); }
+
+// ===== OAUTH =====
+function loginMicrosoftGraph(){
+    const authUrl = `https://login.microsoftonline.com/common/oauth2/v2.0/authorize?client_id=${clientId}&response_type=token&redirect_uri=${encodeURIComponent(redirectUri)}&scope=${encodeURIComponent(scopes)}`;
+    window.location.href = authUrl;
+}
+
+function getTokenFromHash(){
+    if(window.location.hash){
+        const hash = window.location.hash.substring(1);
+        const params = new URLSearchParams(hash);
+        const token = params.get('access_token');
+        if(token){ accessToken = token; window.location.hash=''; fetchExcelKB(); }
+    }
+}
+
+// ===== FETCH EXCEL =====
+async function fetchExcelKB(){
+    if(!accessToken) return;
+    try{
+        // Knowledge sheet
+        const r1=await fetch(`https://graph.microsoft.com/v1.0/me${oneDriveFilePath}:/workbook/worksheets('Knowledge')/range(address='A1:A1000')`,{
+            headers:{Authorization:'Bearer '+accessToken}
+        });
+        const data = await r1.json();
+        kb = data.values ? data.values.map(r=>({text:r[0]})) : [];
+
+        // Admin sheet
+        const r2=await fetch(`https://graph.microsoft.com/v1.0/me${oneDriveFilePath}:/workbook/worksheets('Admin')/range(address='A1:A1')`,{
+            headers:{Authorization:'Bearer '+accessToken}
+        });
+        const adminData = await r2.json();
+        if(adminData.values && adminData.values[0][0]) adminPassword = adminData.values[0][0];
+
+        addChat('Bot','Excel KB loaded from OneDrive.');
+    }catch(e){console.error(e); addChat('Bot','Failed to fetch Excel.');}
+}
+
+// ===== WRITE TO EXCEL =====
+async function appendKnowledgeToExcel(text){
+    if(!accessToken) return alert('No access token.');
+    try{
+        const r = await fetch(`https://graph.microsoft.com/v1.0/me${oneDriveFilePath}:/workbook/worksheets('Knowledge')/usedRange(valuesOnly=true)`,{
+            headers:{Authorization:'Bearer '+accessToken}
+        });
+        const data = await r.json();
+        const nextRow = (data.values ? data.values.length : 0) + 1;
+
+        await fetch(`https://graph.microsoft.com/v1.0/me${oneDriveFilePath}:/workbook/worksheets('Knowledge')/range(address='A${nextRow}')`,{
+            method:'PATCH',
+            headers:{Authorization:'Bearer '+accessToken,'Content-Type':'application/json'},
+            body: JSON.stringify({values:[[text]]})
+        });
+        addChat('Bot','Knowledge saved to Excel Online.');
+    }catch(e){console.error(e); addChat('Bot','Failed to save knowledge.');}
+}
+
+async function updateAdminPassword(newPwd){
+    await fetch(`https://graph.microsoft.com/v1.0/me${oneDriveFilePath}:/workbook/worksheets('Admin')/range(address='A1')`,{
+        method:'PATCH',
+        headers:{Authorization:'Bearer '+accessToken,'Content-Type':'application/json'},
+        body: JSON.stringify({values:[[newPwd]]})
+    });
+    adminPassword=newPwd; addChat('Bot','Admin password updated in Excel.');
+}
+
+// ===== SEARCH =====
+function searchKB(query){
+    const pool = [...kb]; if(isAdmin) pool.push(...hiddenKb);
+    const scored = pool.map(k=>({item:k,score:scoreMatch(query,k.text)}));
+    scored.sort((a,b)=>b.score-a.score);
+    return scored.filter(s=>s.score>0).slice(0,5);
+}
+function composeReply(query){
+    const hits=searchKB(query);
+    if(hits.length===0) return 'No relevant info found.';
+    let reply='Top matches:\n';
+    hits.forEach((h,i)=>reply+=`${i+1}. ${h.item.text}\n`);
+    return reply;
+}
+
+// ===== INPUT HANDLER =====
+document.getElementById('sendBtn').addEventListener('click',handleInput);
+document.getElementById('userInput').addEventListener('keydown',e=>{if(e.key==='Enter')handleInput();});
+
+function handleInput(){
+    const val=document.getElementById('userInput').value.trim(); if(!val) return; document.getElementById('userInput').value='';
+    addChat('User',val);
+
+    if(isAdmin && val.startsWith('/learn ')){
+        const newText=val.slice(7);
+        hiddenKb.push({text:newText});
+        addChat('Bot','Knowledge added to hidden KB. Saving to Excel...');
+        appendKnowledgeToExcel(newText);
+        return;
+    }
+
+    addChat('Bot',composeReply(val));
+}
+
+// ===== ADMIN TOGGLE =====
+document.getElementById('adminToggleBtn').addEventListener('click',()=>{
+    if(isAdmin){ isAdmin=false; document.getElementById('modeLabel').textContent='User'; addChat('Bot','Switched to User mode.'); return; }
+    if(!accessToken){loginMicrosoftGraph(); return;}
+    const pwd=prompt('Enter Admin Password:');
+    if(pwd===adminPassword){isAdmin=true; document.getElementById('modeLabel').textContent='Admin'; addChat('Bot','Admin mode unlocked!');}
+    else alert('Wrong password.');
+});
+
+// ===== ON LOAD =====
+getTokenFromHash();
+</script>
+</body>
+</html>
