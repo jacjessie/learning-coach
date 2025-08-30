@@ -176,25 +176,35 @@ async function readKnowledgeRows(){
 }
 
 // ===== READ: Admin password (AdminTable -> A1/A2 fallback) =====
-async function readAdminPassword(){
-  try{
-    const tData = await gFetch(`${workbookBase}/tables`, { headers:{ Authorization:'Bearer '+accessToken } });
-    const t = (tData.value||[]).find(x => (x.name||'').toLowerCase()==='admintable');
-    if (t){
-      const rowsData = await gFetch(`${workbookBase}/tables('${t.name}')/rows`, { headers:{ Authorization:'Bearer '+accessToken } });
-      const first = rowsData.value && rowsData.value[0] && rowsData.value[0].values && rowsData.value[0].values[0] ? rowsData.value[0].values[0][0] : null;
-      if (first) return String(first);
+async function updateAdminPassword(newPwd){
+  try {
+    const t = await ensureAdminTable();
+
+    // 1) Check if the table already has at least one data row
+    const rows = await gFetch(`${workbookBase}/tables('${t.name}')/rows`, {
+      headers: { Authorization:'Bearer '+accessToken }
+    });
+
+    if ((rows.value || []).length === 0) {
+      // 2) If empty, ADD the first row
+      await gFetch(`${workbookBase}/tables('${t.name}')/rows/add`, {
+        method: 'POST',
+        headers: { Authorization:'Bearer '+accessToken, 'Content-Type':'application/json' },
+        body: JSON.stringify({ values: [[newPwd]] })
+      });
+    } else {
+      // 3) If there is at least one row, OVERWRITE the data body range with the new value
+      await gFetch(`${workbookBase}/tables('${t.name}')/dataBodyRange`, {
+        method: 'PATCH',
+        headers: { Authorization:'Bearer '+accessToken, 'Content-Type':'application/json' },
+        body: JSON.stringify({ values: [[newPwd]] })
+      });
     }
-    // fallback A1/A2
-    const a1 = await gFetch(`${workbookBase}/worksheets('Admin')/range(address='A1')`, { headers:{ Authorization:'Bearer '+accessToken } });
-    const v1 = a1.values && a1.values[0] && a1.values[0][0] ? String(a1.values[0][0]) : '';
-    if (v1 && v1.toLowerCase() !== 'password') return v1; // A1 holds actual password
-    const a2 = await gFetch(`${workbookBase}/worksheets('Admin')/range(address='A2')`, { headers:{ Authorization:'Bearer '+accessToken } });
-    const v2 = a2.values && a2.values[0] && a2.values[0][0] ? String(a2.values[0][0]) : '';
-    return v2 || 'admin123';
-  }catch(err){
-    showErrorToChat(err, "Sheet name must be 'Admin'. Put 'Password' in A1 and the actual password in A2 if you don't use AdminTable.");
-    return 'admin123';
+
+    adminPassword = newPwd;
+    addChat('Bot','Admin password updated in Excel.');
+  } catch (err) {
+    showErrorToChat(err, "Use /passwd NEWPASSWORD while in Admin mode. Ensure 'Admin' sheet exists and AdminTable has header 'Password' in A1.");
   }
 }
 
@@ -373,4 +383,5 @@ getTokenFromHash();
 </script>
 </body>
 </html>
+
 
