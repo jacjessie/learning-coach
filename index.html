@@ -38,8 +38,8 @@ const clientId    = "7f3c8426-3ef5-4e28-acf0-5f51224bc0a6";
 const redirectUri = "https://jacjessie.github.io/learning-coach/"; // your site root (index.html)
 const scopes      = "Files.ReadWrite.All User.Read";
 
-// IMPORTANT: use a share link the *signed-in* account can open
-const shareLink   = "https://xvxky-my.sharepoint.com/:x:/g/personal/jacjessie_xvxky_onmicrosoft_com/Ef4Mr6_ZWd1Dm0D6mAe2ffkBiGIOj00iRvJvJACuArT7cQ?e=8zNCgi";
+// IMPORTANT: Use a share link the *signed-in* account can open
+const shareLink   = "https://xvxky-my.sharepoint.com/:x:/g/personal/jacjessie_xvxky_onmicrosoft_com/Ef4Mr6_ZWd1Dm0D6mAe2ffkBI4syJuD6xhj-ekpItxdyXw?e=UwKP9w";
 
 // ===== STATE =====
 let kb = [];               // public knowledge rows
@@ -130,13 +130,11 @@ function getTokenFromHash(){
   }
 }
 
-// ===== Graph: resolve share link to workbook base =====
+// ===== Graph: share link -> workbook base (with 'u!' prefix) =====
 function toGraphShareId(url){
-  // base64url encode + prefix 'u!' as required by Graph
   let b = btoa(url).replace(/=+$/,'').replace(/\+/g,'-').replace(/\//g,'_');
   return 'u!' + b;
 }
-
 async function resolveWorkbookBase(){
   if (workbookBase) return;
   try{
@@ -148,12 +146,12 @@ async function resolveWorkbookBase(){
     const itemId  = item.id;
     workbookBase  = `https://graph.microsoft.com/v1.0/drives/${driveId}/items/${itemId}/workbook`;
   }catch(err){
-    showErrorToChat(err, "Check that the signed-in account can open the share link. If not, re-share the file to this account.");
+    showErrorToChat(err, "Check that the signed-in account can open the share link. Re-share the file to this account if needed.");
     throw err;
   }
 }
 
-// ===== READ: Knowledge (prefer table) =====
+// ===== READ: Knowledge (prefer table; fallback range) =====
 async function readKnowledgeRows(){
   try{
     const tData = await gFetch(`${workbookBase}/tables`, { headers:{ Authorization:'Bearer '+accessToken } });
@@ -175,36 +173,28 @@ async function readKnowledgeRows(){
   }
 }
 
-// ===== READ: Admin password (AdminTable -> A1/A2 fallback) =====
-async function updateAdminPassword(newPwd){
-  try {
-    const t = await ensureAdminTable();
-
-    // 1) Check if the table already has at least one data row
-    const rows = await gFetch(`${workbookBase}/tables('${t.name}')/rows`, {
+// ===== READ: Admin password (direct cells) =====
+async function readAdminPassword(){
+  try{
+    await resolveWorkbookBase();
+    // Prefer A2 (actual value)
+    const a2 = await gFetch(`${workbookBase}/worksheets('Admin')/range(address='A2')`, {
       headers: { Authorization:'Bearer '+accessToken }
     });
+    const v2 = a2.values && a2.values[0] && a2.values[0][0] ? String(a2.values[0][0]) : '';
+    if (v2) return v2;
 
-    if ((rows.value || []).length === 0) {
-      // 2) If empty, ADD the first row
-      await gFetch(`${workbookBase}/tables('${t.name}')/rows/add`, {
-        method: 'POST',
-        headers: { Authorization:'Bearer '+accessToken, 'Content-Type':'application/json' },
-        body: JSON.stringify({ values: [[newPwd]] })
-      });
-    } else {
-      // 3) If there is at least one row, OVERWRITE the data body range with the new value
-      await gFetch(`${workbookBase}/tables('${t.name}')/dataBodyRange`, {
-        method: 'PATCH',
-        headers: { Authorization:'Bearer '+accessToken, 'Content-Type':'application/json' },
-        body: JSON.stringify({ values: [[newPwd]] })
-      });
-    }
+    // Fallback to A1 (if someone stored it there)
+    const a1 = await gFetch(`${workbookBase}/worksheets('Admin')/range(address='A1')`, {
+      headers: { Authorization:'Bearer '+accessToken }
+    });
+    const v1 = a1.values && a1.values[0] && a1.values[0][0] ? String(a1.values[0][0]) : '';
+    if (v1 && v1.toLowerCase() !== 'password') return v1;
 
-    adminPassword = newPwd;
-    addChat('Bot','Admin password updated in Excel.');
-  } catch (err) {
-    showErrorToChat(err, "Use /passwd NEWPASSWORD while in Admin mode. Ensure 'Admin' sheet exists and AdminTable has header 'Password' in A1.");
+    return 'admin123';
+  }catch(err){
+    showErrorToChat(err, "Could not read Admin!A2/A1. Ensure the 'Admin' sheet exists and the file isn’t locked.");
+    return 'admin123';
   }
 }
 
@@ -234,6 +224,7 @@ async function ensureKnowledgeTable(){
         headers:{ Authorization:'Bearer '+accessToken, 'Content-Type':'application/json' },
         body: JSON.stringify({ address:"Knowledge!A1:A1", hasHeaders:true })
       });
+      // Set header (non-fatal if it fails)
       try{
         await gFetch(`${workbookBase}/worksheets('Knowledge')/range(address='A1')`, {
           method:'PATCH',
@@ -241,6 +232,7 @@ async function ensureKnowledgeTable(){
           body: JSON.stringify({ values:[["Knowledge"]] })
         });
       }catch(e){}
+      // Try to rename table
       try{
         await gFetch(`${workbookBase}/tables('${added.id}')`, {
           method:'PATCH',
@@ -270,54 +262,30 @@ async function appendKnowledgeToExcel(text){
   }
 }
 
-// ===== WRITE: Admin password (AdminTable) =====
-async function ensureAdminTable(){
-  await resolveWorkbookBase();
-  try{
-    const tData = await gFetch(`${workbookBase}/tables`, { headers:{ Authorization:'Bearer '+accessToken } });
-    let t = (tData.value||[]).find(x => (x.name||'').toLowerCase()==='admintable');
-    if (!t){
-      const added = await gFetch(`${workbookBase}/tables/add`, {
-        method:'POST',
-        headers:{ Authorization:'Bearer '+accessToken, 'Content-Type':'application/json' },
-        body: JSON.stringify({ address:"Admin!A1:A1", hasHeaders:true })
-      });
-      await gFetch(`${workbookBase}/worksheets('Admin')/range(address='A1')`, {
-        method:'PATCH',
-        headers:{ Authorization:'Bearer '+accessToken, 'Content-Type':'application/json' },
-        body: JSON.stringify({ values:[["Password"]] })
-      });
-      try{
-        await gFetch(`${workbookBase}/tables('${added.id}')`, {
-          method:'PATCH',
-          headers:{ Authorization:'Bearer '+accessToken, 'Content-Type':'application/json' },
-          body: JSON.stringify({ name:"AdminTable" })
-        });
-      }catch(e){}
-      t = { name:"AdminTable" };
-    }
-    return t;
-  }catch(err){
-    showErrorToChat(err, "Could not ensure AdminTable. Ensure 'Admin' sheet exists.");
-    throw err;
-  }
-}
+// ===== WRITE: Admin password (direct cells) =====
 async function updateAdminPassword(newPwd){
-  try{
-    const t = await ensureAdminTable();
-    await gFetch(`${workbookBase}/tables('${t.name}')/rows`, {
-      method:'DELETE',
-      headers:{ Authorization:'Bearer '+accessToken }
+  try {
+    await resolveWorkbookBase();
+    // Ensure header exists (A1 = "Password") – non-fatal if it fails
+    try {
+      await gFetch(`${workbookBase}/worksheets('Admin')/range(address='A1')`, {
+        method: 'PATCH',
+        headers: { Authorization:'Bearer '+accessToken, 'Content-Type':'application/json' },
+        body: JSON.stringify({ values: [["Password"]] })
+      });
+    } catch(e){ /* ignore header failures */ }
+
+    // Write the actual password to A2
+    await gFetch(`${workbookBase}/worksheets('Admin')/range(address='A2')`, {
+      method: 'PATCH',
+      headers: { Authorization:'Bearer '+accessToken, 'Content-Type':'application/json' },
+      body: JSON.stringify({ values: [[newPwd]] })
     });
-    await gFetch(`${workbookBase}/tables('${t.name}')/rows/add`, {
-      method:'POST',
-      headers:{ Authorization:'Bearer '+accessToken, 'Content-Type':'application/json' },
-      body: JSON.stringify({ values:[[newPwd]] })
-    });
+
     adminPassword = newPwd;
     addChat("Bot","Admin password updated in Excel.");
-  }catch(err){
-    showErrorToChat(err, "Failed to update Admin password. Check Admin sheet / AdminTable / permissions.");
+  } catch (err) {
+    showErrorToChat(err, "Could not write Admin!A2. Ensure the 'Admin' sheet exists and the file isn’t locked.");
   }
 }
 
@@ -383,5 +351,3 @@ getTokenFromHash();
 </script>
 </body>
 </html>
-
-
