@@ -4,31 +4,43 @@
 <meta charset="UTF-8">
 <title>Coach JeetPT</title>
 <script src="https://cdn.jsdelivr.net/npm/xlsx/dist/xlsx.full.min.js"></script>
+<!-- PDF.js (client-only parsing) -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js"></script>
 <style>
 body {font-family: Arial; background:#07102a;color:#e6eef8;margin:20px;}
 .card{background:#0b1220;padding:14px;border-radius:10px;margin-bottom:20px;}
-#chatbox{height:400px;overflow:auto;border:1px solid rgba(255,255,255,0.03);padding:8px;border-radius:6px;display:flex;flex-direction:column;}
-.msg{margin:6px 0;padding:6px;border-radius:6px;max-width:80%;}
+#chatbox{height:420px;overflow:auto;border:1px solid rgba(255,255,255,0.06);padding:8px;border-radius:6px;display:flex;flex-direction:column;}
+.msg{margin:6px 0;padding:6px;border-radius:6px;max-width:80%;white-space:pre-wrap;}
 .user{background:rgba(99,102,241,0.15);align-self:flex-end;}
 .bot{background:rgba(255,255,255,0.03);align-self:flex-start;}
 .controls{display:flex;gap:8px;margin-top:8px;flex-wrap:wrap}
 .btn{background:#7c3aed;border:none;padding:6px 12px;border-radius:6px;color:white;cursor:pointer;}
 .small{opacity:.8;font-size:12px;margin-left:8px}
 input#userInput{min-width:260px}
+.hidden{display:none}
+.tag{display:inline-block;background:#1a2448;border:1px solid #24305e;border-radius:4px;padding:1px 6px;margin-left:6px;font-size:12px;opacity:.9}
 </style>
 </head>
 <body>
 
 <div class="card">
   <h2>Coach JeetPT</h2>
-  <div>Mode: <span id="modeLabel">User</span><span class="small"> — Graph errors (if any) will appear in chat</span></div>
+  <div>
+    Mode: <span id="modeLabel">User</span>
+    <span class="small">— Graph & parser notices (if any) will appear in chat</span>
+  </div>
   <div id="chatbox"></div>
+
   <div class="controls">
     <input id="userInput" placeholder="Ask a question or use /learn (admin)" style="flex:1;">
     <button id="sendBtn" class="btn">Send</button>
     <button id="adminToggleBtn" class="btn">Admin Login</button>
     <button id="reloadBtn" class="btn" title="Reload KB from OneDrive">Reload KB</button>
     <button id="switchBtn" class="btn" title="Clear token & re-login">Switch Account</button>
+    <button id="uploadPdfBtn" class="btn hidden" title="Add Dayforce Implementation PDF (Admin)">Upload PDF</button>
+    <input id="pdfInput" type="file" accept="application/pdf" class="hidden">
+    <span id="pdfCount" class="tag hidden">PDF: 0</span>
   </div>
 </div>
 
@@ -39,16 +51,17 @@ const redirectUri = "https://jacjessie.github.io/learning-coach/"; // your site 
 const scopes      = "Files.ReadWrite.All User.Read";
 
 // IMPORTANT: Use a share link the *signed-in* account can open
-const shareLink   = "https://xvxky-my.sharepoint.com/:x:/g/personal/jacjessie_xvxky_onmicrosoft_com/Ef4Mr6_ZWd1Dm0D6mAe2ffkBI4syJuD6xhj-ekpItxdyXw?e=HtNurB";
+const shareLink   = "https://xvxky-my.sharepoint.com/:x:/g/personal/jacjessie_xvxky_onmicrosoft_com/Ef4Mr6_ZWd1Dm0D6mAe2ffkBI4syJuD6xhj-ekpItxdyXw?e=Q0OVwk";
 
 // ===== STATE =====
-let kb = [];               // public knowledge rows
-let hiddenKb = [];         // session-only entries (also saved to Excel via /learn)
+let kb = [];               // from Excel (public knowledge rows)
+let hiddenKb = [];         // session-only (/learn)
+let docKb = [];            // extracted from uploaded PDFs: {text, source:'PDF', page}
 let isAdmin = false;
 
 // Back-compat variables (will be set from Excel)
-let adminPassword = "admin123"; // legacy plaintext (only used if Excel is in plain mode)
-let adminSecret   = { mode: "plain", plain: "admin123" }; // {mode:"plain",plain:"..."} or {mode:"hashed",hashB64:"...",saltB64:"...",kdf:"..."}
+let adminPassword = "admin123"; // legacy plaintext fallback
+let adminSecret   = { mode: "plain", plain: "admin123" }; // or {mode:"hashed", hashB64, saltB64, kdf}
 
 let accessToken = null;
 let workbookBase = null;   // https://graph.microsoft.com/v1.0/drives/{driveId}/items/{itemId}/workbook
@@ -60,6 +73,14 @@ function addChat(sender, text){
   el.textContent = (sender === "User" ? "You: " : "Bot: ") + text;
   const box = document.getElementById("chatbox");
   box.appendChild(el); box.scrollTop = box.scrollHeight;
+}
+function setAdminUI(){
+  document.getElementById("modeLabel").textContent = isAdmin ? "Admin" : "User";
+  document.getElementById("uploadPdfBtn").classList.toggle("hidden", !isAdmin);
+  document.getElementById("pdfCount").classList.toggle("hidden", docKb.length===0);
+  if (isAdmin){
+    addChat("Bot","Admin mode unlocked! Commands:\n- /learn <text>  → add knowledge to OneDrive\n- /passwd <new> → change admin password (hashed)\n- Reload KB     → re-fetch latest data from OneDrive\n- Upload PDF    → add Dayforce Implementation Guide for fallback");
+  }
 }
 
 // ===== Fuzzy search =====
@@ -82,7 +103,8 @@ function normalizedSimilarity(a,b){
 function scoreMatch(q,t){ return normalizedSimilarity(q,t); }
 
 function searchKB(query){
-  const pool = [...kb]; if(isAdmin) pool.push(...hiddenKb);
+  const pool = [...kb, ...docKb]; // Excel + PDF fallback
+  if (isAdmin) pool.push(...hiddenKb);
   const scored = pool.map(k=>({ item:k, score:scoreMatch(query, k.text) }))
                      .sort((a,b)=>b.score-a.score)
                      .filter(x=>x.score>0)
@@ -91,9 +113,14 @@ function searchKB(query){
 }
 function composeReply(query){
   const hits=searchKB(query);
-  if(hits.length===0) return "No relevant info found.";
+  if(hits.length===0){
+    return "No relevant info found locally. Try searching Dayforce Help: https://help.dayforce.com/";
+  }
   let reply="Top matches:\n";
-  hits.forEach((h,i)=> reply += `${i+1}. ${h.item.text}\n`);
+  hits.forEach((h,i)=>{
+    const tag = h.item.source === 'PDF' ? ` [PDF p.${h.item.page}]` : "";
+    reply += `${i+1}. ${h.item.text}${tag}\n`;
+  });
   return reply;
 }
 
@@ -115,7 +142,7 @@ function showErrorToChat(err, hint=""){
 
 // ===== OAuth (multi-tenant) =====
 function loginMicrosoftGraph(){
-  const tenant = "common"; // app must be configured as multi-tenant in Azure
+  const tenant = "common"; // app configured as multi-tenant in Azure
   const params = new URLSearchParams({
     client_id: clientId,
     response_type: "token",
@@ -156,35 +183,15 @@ async function resolveWorkbookBase(){
 }
 
 // ===== Crypto helpers for hashed password =====
-function b64enc(arrBuf) {
-  const bytes = new Uint8Array(arrBuf);
-  let bin = "";
-  for (let i = 0; i < bytes.length; i++) bin += String.fromCharCode(bytes[i]);
-  return btoa(bin);
-}
-function b64dec(b64) {
-  const bin = atob(b64);
-  const bytes = new Uint8Array(bin.length);
-  for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
-  return bytes.buffer;
-}
-function randomSalt(len = 16) {
-  const buf = new Uint8Array(len);
-  crypto.getRandomValues(buf);
-  return b64enc(buf.buffer);
-}
+function b64enc(arrBuf) { const bytes = new Uint8Array(arrBuf); let bin = ""; for (let i=0;i<bytes.length;i++) bin += String.fromCharCode(bytes[i]); return btoa(bin); }
+function b64dec(b64) { const bin = atob(b64); const bytes = new Uint8Array(bin.length); for (let i=0;i<bin.length;i++) bytes[i] = bin.charCodeAt(i); return bytes.buffer; }
+function randomSalt(len = 16) { const buf = new Uint8Array(len); crypto.getRandomValues(buf); return b64enc(buf.buffer); }
 async function pbkdf2(password, saltB64, iterations = 100000, length = 32) {
   const enc = new TextEncoder();
-  const keyMaterial = await crypto.subtle.importKey(
-    "raw", enc.encode(password), { name: "PBKDF2" }, false, ["deriveBits"]
-  );
+  const keyMaterial = await crypto.subtle.importKey("raw", enc.encode(password), { name: "PBKDF2" }, false, ["deriveBits"]);
   const salt = b64dec(saltB64);
-  const bits = await crypto.subtle.deriveBits(
-    { name: "PBKDF2", hash: "SHA-256", salt, iterations },
-    keyMaterial,
-    length * 8
-  );
-  return b64enc(bits); // base64 derived key
+  const bits = await crypto.subtle.deriveBits({ name: "PBKDF2", hash: "SHA-256", salt, iterations }, keyMaterial, length * 8);
+  return b64enc(bits);
 }
 
 // ===== READ: Knowledge (prefer table; fallback range) =====
@@ -199,7 +206,6 @@ async function readKnowledgeRows(){
         .filter(Boolean);
       return rows;
     }
-    // fallback: A2:A...
     const data = await gFetch(`${workbookBase}/worksheets('Knowledge')/range(address='A2:A20000')`, { headers:{ Authorization:'Bearer '+accessToken } });
     const vals = Array.isArray(data.values) ? data.values : [];
     return vals.map(r => (r && r[0] ? String(r[0]).trim() : "")).filter(Boolean);
@@ -213,11 +219,7 @@ async function readKnowledgeRows(){
 async function readAdminSecret(){
   try{
     await resolveWorkbookBase();
-
-    // Try hashed layout first: A1:C2 -> [PasswordHash, Salt, Kdf] / [hash, salt, desc]
-    const r = await gFetch(`${workbookBase}/worksheets('Admin')/range(address='A1:C2')`, {
-      headers: { Authorization:'Bearer '+accessToken }
-    });
+    const r = await gFetch(`${workbookBase}/worksheets('Admin')/range(address='A1:C2')`, { headers: { Authorization:'Bearer '+accessToken } });
     const grid = r.values || [];
     const a1 = (grid[0] && grid[0][0]) ? String(grid[0][0]) : "";
     const b1 = (grid[0] && grid[0][1]) ? String(grid[0][1]) : "";
@@ -225,24 +227,15 @@ async function readAdminSecret(){
     const a2 = (grid[1] && grid[1][0]) ? String(grid[1][0]) : "";
     const b2 = (grid[1] && grid[1][1]) ? String(grid[1][1]) : "";
     const c2 = (grid[1] && grid[1][2]) ? String(grid[1][2]) : "";
-
     if (a1 === "PasswordHash" && b1 === "Salt" && c1 === "Kdf" && a2 && b2 && c2) {
       return { mode:"hashed", hashB64:a2, saltB64:b2, kdf:c2 };
     }
-
-    // Fallback to plaintext in A2 (preferred) or A1 if present
-    const a2PlainRes = await gFetch(`${workbookBase}/worksheets('Admin')/range(address='A2')`, {
-      headers: { Authorization:'Bearer '+accessToken }
-    });
+    const a2PlainRes = await gFetch(`${workbookBase}/worksheets('Admin')/range(address='A2')`, { headers: { Authorization:'Bearer '+accessToken } });
     const v2 = a2PlainRes.values && a2PlainRes.values[0] && a2PlainRes.values[0][0] ? String(a2PlainRes.values[0][0]) : '';
     if (v2) return { mode:"plain", plain:v2 };
-
-    const a1PlainRes = await gFetch(`${workbookBase}/worksheets('Admin')/range(address='A1')`, {
-      headers: { Authorization:'Bearer '+accessToken }
-    });
+    const a1PlainRes = await gFetch(`${workbookBase}/worksheets('Admin')/range(address='A1')`, { headers: { Authorization:'Bearer '+accessToken } });
     const v1 = a1PlainRes.values && a1PlainRes.values[0] && a1PlainRes.values[0][0] ? String(a1PlainRes.values[0][0]) : '';
     if (v1 && v1.toLowerCase()!=='password') return { mode:"plain", plain:v1 };
-
     return { mode:"plain", plain:"admin123" };
   }catch(err){
     showErrorToChat(err, "Could not read Admin sheet for password/secret.");
@@ -252,10 +245,7 @@ async function readAdminSecret(){
 
 // ===== VERIFY: Admin password input against secret =====
 async function verifyAdminPassword(input){
-  if (adminSecret.mode === "plain") {
-    return input === adminSecret.plain;
-  }
-  // hashed mode
+  if (adminSecret.mode === "plain") return input === adminSecret.plain;
   const { saltB64, hashB64, kdf } = adminSecret;
   if (!saltB64 || !hashB64 || !kdf) return false;
   const parts = kdf.split("-");
@@ -271,10 +261,8 @@ async function fetchExcelKB(){
     await resolveWorkbookBase();
     const knowledgeTexts = await readKnowledgeRows();
     kb = knowledgeTexts.map(text => ({ text }));
-
     adminSecret = await readAdminSecret();
     adminPassword = (adminSecret.mode === "plain") ? adminSecret.plain : "(hashed)";
-
     addChat("Bot","Excel KB loaded from OneDrive.");
   }catch(err){
     showErrorToChat(err, "If this persists: verify API permissions (Files.ReadWrite.All, User.Read + admin consent), and file sharing.");
@@ -293,7 +281,6 @@ async function ensureKnowledgeTable(){
         headers:{ Authorization:'Bearer '+accessToken, 'Content-Type':'application/json' },
         body: JSON.stringify({ address:"Knowledge!A1:A1", hasHeaders:true })
       });
-      // Set header (non-fatal if it fails)
       try{
         await gFetch(`${workbookBase}/worksheets('Knowledge')/range(address='A1')`, {
           method:'PATCH',
@@ -301,7 +288,6 @@ async function ensureKnowledgeTable(){
           body: JSON.stringify({ values:[["Knowledge"]] })
         });
       }catch(e){}
-      // Try to rename table
       try{
         await gFetch(`${workbookBase}/tables('${added.id}')`, {
           method:'PATCH',
@@ -335,32 +321,64 @@ async function appendKnowledgeToExcel(text){
 async function updateAdminPassword(newPwd){
   try {
     await resolveWorkbookBase();
-
-    // Generate salt and derive hash
     const saltB64   = randomSalt(16);
     const derivedB64= await pbkdf2(newPwd, saltB64, 100000, 32);
     const kdfDesc   = "PBKDF2-100000-SHA256-32";
-
-    // Write header row (A1:C1)
     await gFetch(`${workbookBase}/worksheets('Admin')/range(address='A1:C1')`, {
       method: 'PATCH',
       headers: { Authorization:'Bearer '+accessToken, 'Content-Type':'application/json' },
       body: JSON.stringify({ values: [["PasswordHash","Salt","Kdf"]] })
     });
-
-    // Write values row (A2:C2)
     await gFetch(`${workbookBase}/worksheets('Admin')/range(address='A2:C2')`, {
       method: 'PATCH',
       headers: { Authorization:'Bearer '+accessToken, 'Content-Type':'application/json' },
       body: JSON.stringify({ values: [[derivedB64, saltB64, kdfDesc]] })
     });
-
     adminSecret = { mode:"hashed", hashB64:derivedB64, saltB64, kdf:kdfDesc };
     addChat("Bot","Admin password updated (hashed) in Excel.");
   } catch (err) {
     showErrorToChat(err, "Failed to write hashed password. Ensure 'Admin' sheet exists and file isn’t locked.");
   }
 }
+
+// ===== PDF: Admin-only upload & parse =====
+document.getElementById("uploadPdfBtn").addEventListener("click", ()=>{
+  if(!isAdmin) return alert("Admin only. Please login as Admin.");
+  document.getElementById("pdfInput").click();
+});
+document.getElementById("pdfInput").addEventListener("change", async (e)=>{
+  const file = e.target.files && e.target.files[0];
+  if(!file) return;
+  try{
+    addChat("Bot", `Parsing PDF: ${file.name}…`);
+    const arrBuf = await file.arrayBuffer();
+    const pdf = await pdfjsLib.getDocument({ data: arrBuf }).promise;
+    let extracted = 0;
+
+    for(let p=1;p<=pdf.numPages;p++){
+      const page = await pdf.getPage(p);
+      const tc = await page.getTextContent();
+      const pageText = tc.items.map(it=>it.str).join(" ").replace(/\s+/g," ").trim();
+
+      // Chunking: split into ~500-char chunks with small overlap for better hits
+      const chunkSize=500, overlap=80;
+      for(let i=0;i<pageText.length;i+= (chunkSize - overlap)){
+        const chunk = pageText.slice(i, i+chunkSize).trim();
+        if(chunk.length>60){ // keep meaningful chunks
+          docKb.push({ text: chunk, source: 'PDF', page: p });
+          extracted++;
+        }
+      }
+    }
+    document.getElementById("pdfCount").textContent = `PDF: ${docKb.length}`;
+    document.getElementById("pdfCount").classList.remove("hidden");
+    addChat("Bot", `PDF parsed. Added ${extracted} text chunks for fallback search.`);
+  }catch(err){
+    showErrorToChat(err, "Failed to parse PDF. Ensure the file is a standard text-based PDF (not scanned).");
+  }finally{
+    e.target.value = ""; // reset input
+  }
+});
 
 // ===== Input handlers =====
 document.getElementById("sendBtn").addEventListener("click", handleInput);
@@ -397,15 +415,14 @@ async function handleInput(){
     return;
   }
 
-  // Normal search
+  // Normal search (Excel + PDF fallback)
   addChat("Bot", composeReply(val));
 }
 
 // ===== Admin toggle =====
 document.getElementById("adminToggleBtn").addEventListener("click", async ()=>{
   if (isAdmin){
-    isAdmin=false; document.getElementById("modeLabel").textContent="User";
-    addChat("Bot","Switched to User mode.");
+    isAdmin=false; setAdminUI(); addChat("Bot","Switched to User mode.");
     return;
   }
   if (!accessToken){ loginMicrosoftGraph(); return; }
@@ -413,8 +430,7 @@ document.getElementById("adminToggleBtn").addEventListener("click", async ()=>{
   const pwd = prompt("Enter Admin Password:");
   const ok  = await verifyAdminPassword(pwd);
   if (ok){
-    isAdmin = true; document.getElementById("modeLabel").textContent="Admin";
-    addChat("Bot","Admin mode unlocked! Commands:\n- /learn <text>  → add knowledge to OneDrive\n- /passwd <new> → change admin password (hashed)\n- Reload KB     → re-fetch latest data from OneDrive");
+    isAdmin = true; setAdminUI();
   } else {
     alert("Wrong password.");
   }
@@ -425,4 +441,3 @@ getTokenFromHash();
 </script>
 </body>
 </html>
-
