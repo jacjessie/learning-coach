@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<title>Learning Coach OneDrive Demo</title>
+<title>Coach JeetPT</title>
 <script src="https://cdn.jsdelivr.net/npm/xlsx/dist/xlsx.full.min.js"></script>
 <style>
 body {font-family: Arial; background:#07102a;color:#e6eef8;margin:20px;}
@@ -18,14 +18,15 @@ body {font-family: Arial; background:#07102a;color:#e6eef8;margin:20px;}
 <body>
 
 <div class="card">
-<h2>Learning Coach Chat</h2>
-<div>Mode: <span id="modeLabel">User</span></div>
-<div id="chatbox"></div>
-<div class="controls">
-<input id="userInput" placeholder="Ask a question or /learn (admin)" style="flex:1;">
-<button id="sendBtn" class="btn">Send</button>
-<button id="adminToggleBtn" class="btn">Admin Login</button>
-</div>
+  <h2>Learning Coach Chat</h2>
+  <div>Mode: <span id="modeLabel">User</span></div>
+  <div id="chatbox"></div>
+  <div class="controls">
+    <input id="userInput" placeholder="Ask a question or /learn (admin)" style="flex:1;">
+    <button id="sendBtn" class="btn">Send</button>
+    <button id="adminToggleBtn" class="btn">Admin Login</button>
+    <button id="reloadBtn" class="btn" title="Reload KB from OneDrive">Reload KB</button>
+  </div>
 </div>
 
 <script>
@@ -34,18 +35,19 @@ const clientId = '7f3c8426-3ef5-4e28-acf0-5f51224bc0a6';
 const redirectUri = window.location.origin + window.location.pathname;
 const scopes = "Files.ReadWrite.All User.Read";
 
-// OneDrive Excel path (remove ?e=… for API)
-const oneDriveFilePath = "/drive/root:/personal/jessa_catacutan_dayforce_com/Documents/ERDPw5Qrw_FPlcclpjXnnS0Bhu7OxHcAbfLDSzArTc6wSg.xlsx";
+// Your human/share link to the Excel file (NOT the Graph path)
+const shareLink = "https://ceridian-my.sharepoint.com/:x:/g/personal/jessa_catacutan_dayforce_com/ERDPw5Qrw_FPlcclpjXnnS0Bhu7OxHcAbfLDSzArTc6wSg?e=EMrywP";
 
 // ===== STATE =====
-let kb=[], hiddenKb=[], isAdmin=false, adminPassword='admin123';
+let kb = [], hiddenKb = [], isAdmin = false, adminPassword = 'admin123';
 let accessToken = null;
+let workbookBase = null; // will be like: https://graph.microsoft.com/v1.0/drives/{driveId}/items/{itemId}/workbook
 
 // ===== UTILS =====
 function addChat(sender,text){
-    const el=document.createElement('div'); el.className='msg '+(sender==='User'?'user':'bot'); el.textContent=(sender==='User'?'You: ':'Bot: ')+text;
-    document.getElementById('chatbox').appendChild(el);
-    document.getElementById('chatbox').scrollTop=document.getElementById('chatbox').scrollHeight;
+  const el=document.createElement('div'); el.className='msg '+(sender==='User'?'user':'bot'); el.textContent=(sender==='User'?'You: ':'Bot: ')+text;
+  document.getElementById('chatbox').appendChild(el);
+  document.getElementById('chatbox').scrollTop=document.getElementById('chatbox').scrollHeight;
 }
 
 function levenshtein(a,b){
@@ -58,187 +60,293 @@ function levenshtein(a,b){
   } return dp[m][n];
 }
 function normalizedSimilarity(a,b){ const dist=levenshtein(a,b); return Math.max(a.length,b.length)?1-dist/Math.max(a.length,b.length):1; }
-function scoreMatch(q,text){ return normalizedSimilarity(q,text); }
+function scoreMatch(q,text){ return normalizedSimilarity((q||'').toLowerCase(), (text||'').toLowerCase()); }
 
 // ===== OAUTH =====
 function loginMicrosoftGraph(){
-    const authUrl = `https://login.microsoftonline.com/common/oauth2/v2.0/authorize?client_id=${clientId}&response_type=token&redirect_uri=${encodeURIComponent(redirectUri)}&scope=${encodeURIComponent(scopes)}`;
-    window.location.href = authUrl;
+  const authUrl = `https://login.microsoftonline.com/common/oauth2/v2.0/authorize?client_id=${clientId}&response_type=token&redirect_uri=${encodeURIComponent(redirectUri)}&scope=${encodeURIComponent(scopes)}`;
+  window.location.href = authUrl;
 }
 
 function getTokenFromHash(){
-    if(window.location.hash){
-        const hash = window.location.hash.substring(1);
-        const params = new URLSearchParams(hash);
-        const token = params.get('access_token');
-        if(token){ accessToken = token; window.location.hash=''; fetchExcelKB(); }
-    }
+  if(window.location.hash){
+    const hash = window.location.hash.substring(1);
+    const params = new URLSearchParams(hash);
+    const token = params.get('access_token');
+    if(token){ accessToken = token; window.location.hash=''; fetchExcelKB(); }
+  }
 }
 
-// ===== FETCH EXCEL =====
-async function fetchExcelKB(){
-    if(!accessToken) return;
-    try{
-        // Knowledge sheet
-        const r1=await fetch(`https://graph.microsoft.com/v1.0/me${oneDriveFilePath}:/workbook/worksheets('Knowledge')/range(address='A1:A1000')`,{
-            headers:{Authorization:'Bearer '+accessToken}
-        });
-        const data = await r1.json();
-        kb = data.values ? data.values.map(r=>({text:r[0]})) : [];
-
-        // Admin sheet
-        const r2=await fetch(`https://graph.microsoft.com/v1.0/me${oneDriveFilePath}:/workbook/worksheets('Admin')/range(address='A1:A1')`,{
-            headers:{Authorization:'Bearer '+accessToken}
-        });
-        const adminData = await r2.json();
-        if(adminData.values && adminData.values[0][0]) adminPassword = adminData.values[0][0];
-
-        addChat('Bot','Excel KB loaded from OneDrive.');
-    }catch(e){console.error(e); addChat('Bot','Failed to fetch Excel.');}
+// ===== GRAPH FILE RESOLUTION =====
+function toBase64Url(u){
+  let s = btoa(u).replace(/=+$/,'').replace(/\+/g,'-').replace(/\//g,'_');
+  return s;
 }
 
-// ===== WRITE TO EXCEL (via Table API, more reliable) =====
-async function ensureKnowledgeTable() {
-    const res = await fetch(`${workbookBase}/tables`, {
+async function resolveWorkbookBase() {
+  if (workbookBase) return;
+  const encoded = toBase64Url(shareLink);
+  const driveItemRes = await fetch(`https://graph.microsoft.com/v1.0/shares/${encoded}/driveItem`, {
+    headers: { Authorization: 'Bearer ' + accessToken }
+  });
+  if (!driveItemRes.ok) throw new Error('Cannot resolve share link to drive item.');
+  const item = await driveItemRes.json();
+  const driveId = item.parentReference.driveId;
+  const itemId  = item.id;
+  workbookBase = `https://graph.microsoft.com/v1.0/drives/${driveId}/items/${itemId}/workbook`;
+}
+
+// ===== READ HELPERS =====
+async function readKnowledgeRows() {
+  // Prefer a table called KnowledgeTable
+  const tRes = await fetch(`${workbookBase}/tables`, { headers: { Authorization: 'Bearer ' + accessToken } });
+  if (tRes.ok) {
+    const tData = await tRes.json();
+    const knowledgeTable = (tData.value || []).find(t => (t.name || '').toLowerCase() === 'knowledgetable');
+    if (knowledgeTable) {
+      const rowsRes = await fetch(`${workbookBase}/tables('${knowledgeTable.name}')/rows`, {
         headers: { Authorization: 'Bearer ' + accessToken }
-    });
-    const tables = await res.json();
-    let table = tables.value.find(t => t.name === "KnowledgeTable");
-    
-    if (!table) {
-        // Create table starting at A1 with header "Knowledge"
-        const addRes = await fetch(`${workbookBase}/tables/add`, {
-            method: 'POST',
-            headers: { Authorization: 'Bearer ' + accessToken, 'Content-Type': 'application/json' },
-            body: JSON.stringify({ address: "Knowledge!A1:A1", hasHeaders: true })
-        });
-        table = await addRes.json();
-
-        // Set the header explicitly
-        await fetch(`${workbookBase}/worksheets('Knowledge')/range(address='A1')`, {
-            method: 'PATCH',
-            headers: { Authorization: 'Bearer ' + accessToken, 'Content-Type': 'application/json' },
-            body: JSON.stringify({ values: [["Knowledge"]] })
-        });
-
-        // Rename table for consistency
-        await fetch(`${workbookBase}/tables('${table.id}')`, {
-            method: 'PATCH',
-            headers: { Authorization: 'Bearer ' + accessToken, 'Content-Type': 'application/json' },
-            body: JSON.stringify({ name: "KnowledgeTable" })
-        });
-        table.name = "KnowledgeTable";
+      });
+      if (rowsRes.ok) {
+        const rowsData = await rowsRes.json();
+        const rows = (rowsData.value || []).map(r => (r.values && r.values[0] && r.values[0][0]) ? String(r.values[0][0]).trim() : '').filter(Boolean);
+        return rows;
+      }
     }
-    return table;
+  }
+  // Fallback: read A2:A… (skip header A1)
+  const r1 = await fetch(`${workbookBase}/worksheets('Knowledge')/range(address='A2:A20000')`, {
+    headers: { Authorization: 'Bearer ' + accessToken }
+  });
+  if (!r1.ok) throw new Error('Failed to read Knowledge range.');
+  const data = await r1.json();
+  const rows = Array.isArray(data.values) ? data.values : [];
+  return rows.map(r => (r && r[0] ? String(r[0]).trim() : '')).filter(Boolean);
+}
+
+async function readAdminPassword() {
+  // Try AdminTable first
+  const tRes = await fetch(`${workbookBase}/tables`, { headers: { Authorization: 'Bearer ' + accessToken } });
+  if (tRes.ok) {
+    const tData = await tRes.json();
+    const adminTable = (tData.value || []).find(t => (t.name || '').toLowerCase() === 'admintable');
+    if (adminTable) {
+      const rowsRes = await fetch(`${workbookBase}/tables('${adminTable.name}')/rows`, {
+        headers: { Authorization: 'Bearer ' + accessToken }
+      });
+      if (rowsRes.ok) {
+        const rowsData = await rowsRes.json();
+        const first = rowsData.value && rowsData.value[0] && rowsData.value[0].values && rowsData.value[0].values[0] ? rowsData.value[0].values[0][0] : null;
+        if (first) return String(first);
+      }
+    }
+  }
+  // Fallback to Admin!A1 (or A2 if header is used)
+  const rA1 = await fetch(`${workbookBase}/worksheets('Admin')/range(address='A1')`, {
+    headers: { Authorization:'Bearer ' + accessToken }
+  });
+  if (rA1.ok) {
+    const d1 = await rA1.json();
+    const v1 = d1.values && d1.values[0] && d1.values[0][0] ? String(d1.values[0][0]) : '';
+    // If A1 literally holds "Password" (header), try A2 for the actual value
+    if (v1 && v1.toLowerCase() !== 'password') return v1;
+    const rA2 = await fetch(`${workbookBase}/worksheets('Admin')/range(address='A2')`, {
+      headers: { Authorization:'Bearer ' + accessToken }
+    });
+    if (rA2.ok) {
+      const d2 = await rA2.json();
+      const v2 = d2.values && d2.values[0] && d2.values[0][0] ? String(d2.values[0][0]) : '';
+      if (v2) return v2;
+    }
+  }
+  return 'admin123'; // fallback
+}
+
+// ===== FETCH EXCEL (robust) =====
+async function fetchExcelKB(){
+  if (!accessToken) return;
+  try {
+    await resolveWorkbookBase();
+    const knowledgeTexts = await readKnowledgeRows();
+    kb = knowledgeTexts.map(text => ({ text }));
+    adminPassword = await readAdminPassword();
+    addChat('Bot','Excel KB loaded from OneDrive.');
+  } catch (e) {
+    console.error(e);
+    addChat('Bot','Failed to fetch Excel.');
+  }
+}
+
+// ===== WRITE TO EXCEL (via Table API, reliable) =====
+async function ensureKnowledgeTable() {
+  await resolveWorkbookBase();
+  const res = await fetch(`${workbookBase}/tables`, {
+    headers: { Authorization: 'Bearer ' + accessToken }
+  });
+  const tables = await res.json();
+  let table = tables.value.find(t => (t.name || '').toLowerCase() === "knowledgetable");
+  
+  if (!table) {
+    // Create table starting at A1 with header "Knowledge"
+    const addRes = await fetch(`${workbookBase}/tables/add`, {
+      method: 'POST',
+      headers: { Authorization: 'Bearer ' + accessToken, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ address: "Knowledge!A1:A1", hasHeaders: true })
+    });
+    if (!addRes.ok) throw new Error(await addRes.text());
+    table = await addRes.json();
+
+    // Ensure header is set
+    const hdr = await fetch(`${workbookBase}/worksheets('Knowledge')/range(address='A1')`, {
+      method: 'PATCH',
+      headers: { Authorization: 'Bearer ' + accessToken, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ values: [["Knowledge"]] })
+    });
+    if (!hdr.ok) console.warn('Could not set Knowledge header explicitly.');
+
+    // Rename table to a consistent name
+    const rn = await fetch(`${workbookBase}/tables('${table.id}')`, {
+      method: 'PATCH',
+      headers: { Authorization: 'Bearer ' + accessToken, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ name: "KnowledgeTable" })
+    });
+    if (!rn.ok) console.warn('Could not rename table to KnowledgeTable.');
+    table.name = "KnowledgeTable";
+  }
+  return table;
 }
 
 async function appendKnowledgeToExcel(text) {
-    try {
-        const table = await ensureKnowledgeTable();
-        const res = await fetch(`${workbookBase}/tables('${table.name}')/rows/add`, {
-            method: 'POST',
-            headers: { Authorization: 'Bearer ' + accessToken, 'Content-Type': 'application/json' },
-            body: JSON.stringify({ values: [[text]] })
-        });
-        if (!res.ok) throw new Error(await res.text());
-        addChat('Bot','Knowledge saved to Excel Online.');
-    } catch(e) {
-        console.error(e);
-        addChat('Bot','Failed to save knowledge.');
-    }
+  try {
+    const table = await ensureKnowledgeTable();
+    const res = await fetch(`${workbookBase}/tables('${table.name}')/rows/add`, {
+      method: 'POST',
+      headers: { Authorization: 'Bearer ' + accessToken, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ values: [[text]] })
+    });
+    if (!res.ok) throw new Error(await res.text());
+    addChat('Bot','Knowledge saved to Excel Online.');
+  } catch(e) {
+    console.error(e);
+    addChat('Bot','Failed to save knowledge.');
+  }
 }
 
+// ===== ADMIN PASSWORD WRITE (table-based, consistent) =====
 async function ensureAdminTable() {
-    const res = await fetch(`${workbookBase}/tables`, {
-        headers: { Authorization: 'Bearer ' + accessToken }
+  await resolveWorkbookBase();
+  const res = await fetch(`${workbookBase}/tables`, {
+    headers: { Authorization: 'Bearer ' + accessToken }
+  });
+  const tables = await res.json();
+  let table = tables.value.find(t => (t.name || '').toLowerCase() === "admintable");
+  
+  if (!table) {
+    // Create Admin table at A1 with header "Password"
+    const addRes = await fetch(`${workbookBase}/tables/add`, {
+      method: 'POST',
+      headers: { Authorization: 'Bearer ' + accessToken, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ address: "Admin!A1:A1", hasHeaders: true })
     });
-    const tables = await res.json();
-    let table = tables.value.find(t => t.name === "AdminTable");
-    
-    if (!table) {
-        // Create table starting at A1
-        const addRes = await fetch(`${workbookBase}/tables/add`, {
-            method: 'POST',
-            headers: { Authorization: 'Bearer ' + accessToken, 'Content-Type': 'application/json' },
-            body: JSON.stringify({ address: "Admin!A1:A1", hasHeaders: true })
-        });
-        table = await addRes.json();
+    if (!addRes.ok) throw new Error(await addRes.text());
+    table = await addRes.json();
 
-        // Set header explicitly
-        await fetch(`${workbookBase}/worksheets('Admin')/range(address='A1')`, {
-            method: 'PATCH',
-            headers: { Authorization: 'Bearer ' + accessToken, 'Content-Type': 'application/json' },
-            body: JSON.stringify({ values: [["Password"]] })
-        });
+    // Set header explicitly
+    await fetch(`${workbookBase}/worksheets('Admin')/range(address='A1')`, {
+      method: 'PATCH',
+      headers: { Authorization: 'Bearer ' + accessToken, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ values: [["Password"]] })
+    });
 
-        // Rename table
-        await fetch(`${workbookBase}/tables('${table.id}')`, {
-            method: 'PATCH',
-            headers: { Authorization: 'Bearer ' + accessToken, 'Content-Type': 'application/json' },
-            body: JSON.stringify({ name: "AdminTable" })
-        });
-        table.name = "AdminTable";
-    }
-    return table;
+    // Rename to AdminTable
+    await fetch(`${workbookBase}/tables('${table.id}')`, {
+      method: 'PATCH',
+      headers: { Authorization: 'Bearer ' + accessToken, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ name: "AdminTable" })
+    });
+    table.name = "AdminTable";
+  }
+  return table;
 }
 
 async function updateAdminPassword(newPwd){
+  try {
     const table = await ensureAdminTable();
-    // Clear table and replace with new password
+    // Clear all rows in AdminTable (keep header)
     await fetch(`${workbookBase}/tables('${table.name}')/rows`, {
-        method: 'DELETE',
-        headers: { Authorization: 'Bearer ' + accessToken }
+      method: 'DELETE',
+      headers: { Authorization: 'Bearer ' + accessToken }
     });
-    await fetch(`${workbookBase}/tables('${table.name}')/rows/add`, {
-        method: 'POST',
-        headers: { Authorization: 'Bearer ' + accessToken, 'Content-Type': 'application/json' },
-        body: JSON.stringify({ values: [[newPwd]] })
+    // Add the single-password row
+    const add = await fetch(`${workbookBase}/tables('${table.name}')/rows/add`, {
+      method: 'POST',
+      headers: { Authorization: 'Bearer ' + accessToken, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ values: [[newPwd]] })
     });
+    if (!add.ok) throw new Error(await add.text());
     adminPassword = newPwd;
     addChat('Bot','Admin password updated in Excel.');
+  } catch (e) {
+    console.error(e);
+    addChat('Bot','Failed to update admin password.');
+  }
 }
 
 // ===== SEARCH =====
 function searchKB(query){
-    const pool = [...kb]; if(isAdmin) pool.push(...hiddenKb);
-    const scored = pool.map(k=>({item:k,score:scoreMatch(query,k.text)}));
-    scored.sort((a,b)=>b.score-a.score);
-    return scored.filter(s=>s.score>0).slice(0,5);
+  const pool = [...kb]; if(isAdmin) pool.push(...hiddenKb);
+  const scored = pool.map(k=>({item:k,score:scoreMatch(query,k.text)}));
+  scored.sort((a,b)=>b.score-a.score);
+  return scored.filter(s=>s.score>0).slice(0,5);
 }
 function composeReply(query){
-    const hits=searchKB(query);
-    if(hits.length===0) return 'No relevant info found.';
-    let reply='Top matches:\n';
-    hits.forEach((h,i)=>reply+=`${i+1}. ${h.item.text}\n`);
-    return reply;
+  const hits=searchKB(query);
+  if(hits.length===0) return 'No relevant info found.';
+  let reply='Top matches:\n';
+  hits.forEach((h,i)=>reply+=`${i+1}. ${h.item.text}\n`);
+  return reply;
 }
 
 // ===== INPUT HANDLER =====
 document.getElementById('sendBtn').addEventListener('click',handleInput);
 document.getElementById('userInput').addEventListener('keydown',e=>{if(e.key==='Enter')handleInput();});
+document.getElementById('reloadBtn').addEventListener('click', ()=> {
+  if (!accessToken) { addChat('Bot','Please login first (Admin Login).'); return; }
+  fetchExcelKB();
+});
 
-function handleInput(){
-    const val=document.getElementById('userInput').value.trim(); if(!val) return; document.getElementById('userInput').value='';
-    addChat('User',val);
+async function handleInput(){
+  const val=document.getElementById('userInput').value.trim(); if(!val) return; document.getElementById('userInput').value='';
+  addChat('User',val);
 
-    if(isAdmin && val.startsWith('/learn ')){
-        const newText=val.slice(7);
-        hiddenKb.push({text:newText});
-        addChat('Bot','Knowledge added to hidden KB. Saving to Excel...');
-        appendKnowledgeToExcel(newText);
-        return;
-    }
+  if(isAdmin && val.startsWith('/learn ')){
+    const newText=val.slice(7).trim();
+    if(!newText){ addChat('Bot','Nothing to learn.'); return; }
+    hiddenKb.push({text:newText});
+    addChat('Bot','Adding knowledge to OneDrive…');
+    await appendKnowledgeToExcel(newText);
+    // Optional refresh after write:
+    await fetchExcelKB();
+    return;
+  }
 
-    addChat('Bot',composeReply(val));
+  addChat('Bot',composeReply(val));
 }
 
 // ===== ADMIN TOGGLE =====
-document.getElementById('adminToggleBtn').addEventListener('click',()=>{
-    if(isAdmin){ isAdmin=false; document.getElementById('modeLabel').textContent='User'; addChat('Bot','Switched to User mode.'); return; }
-    if(!accessToken){loginMicrosoftGraph(); return;}
-    const pwd=prompt('Enter Admin Password:');
-    if(pwd===adminPassword){isAdmin=true; document.getElementById('modeLabel').textContent='Admin'; addChat('Bot','Admin mode unlocked!');}
-    else alert('Wrong password.');
+document.getElementById('adminToggleBtn').addEventListener('click', async ()=>{
+  if(isAdmin){
+    isAdmin=false; document.getElementById('modeLabel').textContent='User'; addChat('Bot','Switched to User mode.'); return;
+  }
+  if(!accessToken){ loginMicrosoftGraph(); return; }
+  // Ensure KB and password loaded at least once after login
+  if (!workbookBase) { await fetchExcelKB(); }
+  const pwd=prompt('Enter Admin Password:');
+  if(pwd===adminPassword){
+    isAdmin=true; document.getElementById('modeLabel').textContent='Admin'; addChat('Bot','Admin mode unlocked!');
+  } else {
+    alert('Wrong password.');
+  }
 });
 
 // ===== ON LOAD =====
@@ -246,4 +354,3 @@ getTokenFromHash();
 </script>
 </body>
 </html>
-
