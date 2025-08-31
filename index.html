@@ -28,10 +28,14 @@
   .sourceTag a:hover{text-decoration:underline}
   .sourcesWrap{display:flex;flex-wrap:wrap}
 
-  /* Loading indicator */
-  .loadingRow { display:flex; align-items:center; gap:10px; }
+  /* Spinner for status */
   .spinner { width:14px; height:14px; border:2px solid rgba(255,255,255,0.25); border-top-color:#cbd5ff; border-radius:50%; animation:spin 0.9s linear infinite; }
   @keyframes spin { from { transform: rotate(0deg);} to { transform: rotate(360deg);} }
+
+  /* Status row */
+  .status { display:flex; align-items:center; gap:10px; margin-top:6px; font-size:12px; opacity:.9; }
+  .status .bar { width:220px; height:6px; background:rgba(255,255,255,0.15); border-radius:6px; overflow:hidden; }
+  .status .bar > span { display:block; height:100%; width:0%; background:#7c3aed; transition:width .2s; }
 </style>
 </head>
 <body>
@@ -58,6 +62,13 @@
     <div style="opacity:.8;margin-bottom:4px;">Sources:</div>
     <div id="sourcesWrap" class="sourcesWrap"></div>
   </div>
+
+  <!-- Loading / progress status -->
+  <div id="loadStatus" class="status hidden">
+    <div class="spinner"></div>
+    <span id="statusText">Loading…</span>
+    <div class="bar"><span id="statusFill"></span></div>
+  </div>
 </div>
 
 <script>
@@ -71,7 +82,6 @@ const shareLink   = "https://xvxky-my.sharepoint.com/:x:/g/personal/jacjessie_xv
 let kb = [], hiddenKb = [], docKb = [], pdfWebUrls = [], pdfNames = [];
 let isAdmin = false, accessToken = null, workbookBase = null;
 let adminSecret = { mode: "plain", plain: "admin123" };
-let loadingEl = null;
 
 // ===== UI =====
 function addChat(sender, html){
@@ -115,22 +125,25 @@ function renderSources(){
     wrap.appendChild(span);
   });
 }
-// Loading indicator
-function showLoading(text="Searching…"){
-  hideLoading();
-  const el = document.createElement("div");
-  el.className = "msg bot";
-  el.setAttribute("data-loading", "true");
-  el.innerHTML = `Bot:<br><div class="loadingRow"><div class="spinner"></div><span>${text}</span></div>`;
-  const box = document.getElementById("chatbox");
-  box.appendChild(el);
-  box.scrollTop = box.scrollHeight;
-  loadingEl = el;
+
+// ===== Status / Progress helpers =====
+function setStatus(text, ratio){
+  const box = document.getElementById('loadStatus');
+  const txt = document.getElementById('statusText');
+  const fill = document.getElementById('statusFill');
+  if (!box || !txt || !fill) return;
+  box.classList.remove('hidden');
+  txt.textContent = text;
+  if (typeof ratio === 'number') {
+    const pct = Math.max(0, Math.min(1, ratio)) * 100;
+    fill.style.width = pct + '%';
+  }
 }
-function hideLoading(){
-  const box = document.getElementById("chatbox");
-  if (loadingEl && box.contains(loadingEl)) box.removeChild(loadingEl);
-  loadingEl = null;
+function clearStatus(){
+  const box = document.getElementById('loadStatus');
+  const fill = document.getElementById('statusFill');
+  if (box) box.classList.add('hidden');
+  if (fill) fill.style.width = '0%';
 }
 
 // Auto-expand textarea
@@ -140,7 +153,7 @@ userInput.addEventListener("input", function(){
   this.style.height = this.scrollHeight + "px";
 });
 
-// ===== Search =====
+// ===== Search (Option 1: keyword filter + fuzzy rank) =====
 function levenshtein(a,b){if(!a||!b) return a||b?Math.max(a.length,b.length):0;const m=a.length,n=b.length,dp=Array(m+1).fill(0).map(()=>Array(n+1).fill(0));for(let i=0;i<=m;i++)dp[i][0]=i;for(let j=0;j<=n;j++)dp[0][j]=j;for(let i=1;i<=m;i++)for(let j=1;j<=n;j++){const c=a[i-1]===b[j-1]?0:1;dp[i][j]=Math.min(dp[i-1][j]+1,dp[i][j-1]+1,dp[i-1][j-1]+c);}return dp[m][n];}
 function normalizedSimilarity(a,b){a=(a||"").toLowerCase();b=(b||"").toLowerCase();const d=levenshtein(a,b),M=Math.max(a.length,b.length);return M?1-d/M:1;}
 function scoreMatch(q,t){return normalizedSimilarity(q,t);} 
@@ -148,10 +161,11 @@ function searchKB(query){
   const words = query.toLowerCase().split(/\s+/).filter(w=>w.length>2);
   const pool = [...kb, ...docKb];
   if (isAdmin) pool.push(...hiddenKb);
-  const scored = pool.filter(k=>words.some(w=>k.text.toLowerCase().includes(w)))
-    .map(k=>{
-      let score = scoreMatch(query,k.text);
-      if (k.source === 'PDF') score += 0.15; // keep slight PDF preference
+  const scored = pool
+    .filter(k => words.some(w => k.text.toLowerCase().includes(w))) // filter first
+    .map(k => {
+      let score = scoreMatch(query, k.text);
+      if (k.source === 'PDF') score += 0.15; // slight boost
       return { item:k, score };
     })
     .sort((a,b)=>b.score-a.score)
@@ -199,10 +213,71 @@ function getTokenFromHash(){if(window.location.hash){const p=new URLSearchParams
 
 // ===== Excel KB + Config (multi‑PDF) =====
 async function resolveWorkbookBase(){if(workbookBase)return;const shareId=toGraphShareId(shareLink);const item=await gFetch(`https://graph.microsoft.com/v1.0/shares/${shareId}/driveItem`,{headers:{Authorization:"Bearer "+accessToken}});workbookBase=`https://graph.microsoft.com/v1.0/drives/${item.parentReference.driveId}/items/${item.id}/workbook`;}
-async function readKnowledgeRows(){try{const data=await gFetch(`${workbookBase}/worksheets('Knowledge')/range(address='A2:A20000')`,{headers:{Authorization:'Bearer '+accessToken}});const vals=Array.isArray(data.values)?data.values:[];return vals.map(r=>(r&&r[0]?String(r[0]).trim():"")).filter(Boolean);}catch(err){addChat("Bot","Error reading Knowledge: "+err.message);return[];}}
-async function readPdfLinksFromConfig(){let entries=[];try{const data=await gFetch(`${workbookBase}/worksheets('Config')/range(address='A2:B200')`,{headers:{Authorization:'Bearer '+accessToken}});const vals=Array.isArray(data.values)?data.values:[];entries=vals.map(r=>({name:String(r[0]||"").trim(),link:String(r[1]||"").trim()})).filter(e=>/^https?:\/\//i.test(e.link));if(entries.length)return entries;}catch(e){}try{const data=await gFetch(`${workbookBase}/worksheets('Config')/range(address='A2:A200')`,{headers:{Authorization:'Bearer '+accessToken}});const vals=Array.isArray(data.values)?data.values:[];entries=vals.map(r=>({name:'',link:(r&&r[0]?String(r[0]).trim():"")})).filter(e=>/^https?:\/\//i.test(e.link));}catch(err){addChat("Bot","Config sheet missing or PDF links not found.");}return entries;}
 
-// ===== Admin secret + helpers =====
+// Read KB rows
+async function readKnowledgeRows(){
+  try{
+    // Prefer a table if it exists, otherwise range (A2:A)
+    const tData = await gFetch(`${workbookBase}/tables`, { headers:{ Authorization:'Bearer '+accessToken } });
+    const t = (tData.value||[]).find(x => (x.name||'').toLowerCase()==='knowledgetable');
+    if (t){
+      const rowsData = await gFetch(`${workbookBase}/tables('${t.name}')/rows`, { headers:{ Authorization:'Bearer '+accessToken } });
+      return (rowsData.value||[]).map(r => (r.values && r.values[0] && r.values[0][0]) ? String(r.values[0][0]).trim() : "").filter(Boolean);
+    }
+  }catch(e){ /* fall back to range */ }
+  try{
+    const data=await gFetch(`${workbookBase}/worksheets('Knowledge')/range(address='A2:A20000')`,{headers:{Authorization:'Bearer '+accessToken}});
+    const vals=Array.isArray(data.values)?data.values:[];
+    return vals.map(r=>(r&&r[0]?String(r[0]).trim():"")).filter(Boolean);
+  }catch(err){
+    addChat("Bot","Error reading Knowledge: "+err.message);
+    return [];
+  }
+}
+
+// Read PDF links (support ConfigTable or ranges)
+async function readPdfLinksFromConfig(){
+  let entries=[];
+  // Try table first (ConfigTable: Name | PDFLink)
+  try{
+    const tData = await gFetch(`${workbookBase}/tables`, { headers:{ Authorization:'Bearer '+accessToken } });
+    const t = (tData.value||[]).find(x => (x.name||'').toLowerCase()==='configtable');
+    if (t){
+      const headerRes = await gFetch(`${workbookBase}/tables('${t.name}')/headerRowRange`, { headers:{ Authorization:'Bearer '+accessToken } });
+      const headers = (headerRes.values && headerRes.values[0]) ? headerRes.values[0].map(v=>String(v).trim().toLowerCase()) : [];
+      const nameIdx = headers.indexOf('name');
+      const linkIdx = headers.indexOf('pdflink');
+      const rowsData = await gFetch(`${workbookBase}/tables('${t.name}')/rows`, { headers:{ Authorization:'Bearer '+accessToken } });
+      entries = (rowsData.value||[]).map(r => {
+        const row = (r.values && r.values[0]) ? r.values[0] : [];
+        const name = nameIdx>=0 ? String(row[nameIdx]||'').trim() : '';
+        const link = linkIdx>=0 ? String(row[linkIdx]||'').trim() : '';
+        return { name, link };
+      }).filter(e => /^https?:\/\//i.test(e.link));
+      if (entries.length) return entries;
+    }
+  }catch(e){ /* fall back to ranges */ }
+
+  // Range A2:B (Name | Link)
+  try{
+    const data=await gFetch(`${workbookBase}/worksheets('Config')/range(address='A2:B200')`,{headers:{Authorization:'Bearer '+accessToken}});
+    const vals=Array.isArray(data.values)?data.values:[];
+    entries=vals.map(r=>({name:String(r[0]||"").trim(),link:String(r[1]||"").trim()})).filter(e=>/^https?:\/\//i.test(e.link));
+    if(entries.length) return entries;
+  }catch(e){ /* continue */ }
+
+  // Range A2:A (Link only)
+  try{
+    const data=await gFetch(`${workbookBase}/worksheets('Config')/range(address='A2:A200')`,{headers:{Authorization:'Bearer '+accessToken}});
+    const vals=Array.isArray(data.values)?data.values:[];
+    entries=vals.map(r=>({name:'',link:(r&&r[0]?String(r[0]).trim():"")})).filter(e=>/^https?:\/\//i.test(e.link));
+  }catch(err){
+    addChat("Bot","Config sheet missing or PDF links not found.");
+  }
+  return entries;
+}
+
+// Admin secret + helpers
 async function readAdminSecret(){
   try{
     await resolveWorkbookBase();
@@ -284,15 +359,17 @@ async function updateAdminPassword(newPwd){
   }catch(err){ addChat("Bot","Failed to write hashed password: "+err.message); }
 }
 
-// ===== PDF fetch & indexing =====
-async function fetchSinglePdfFromOneDrive(link, idx){
+// ===== PDF fetch & indexing (with progress callback) =====
+async function fetchSinglePdfFromOneDrive(link, idx, label, onProgress){
   const shareId=toGraphShareId(link);
   const item=await gFetch(`https://graph.microsoft.com/v1.0/shares/${shareId}/driveItem`,{headers:{Authorization:"Bearer "+accessToken}});
   pdfWebUrls[idx]=item.webUrl;
   const buf=await gFetch(`https://graph.microsoft.com/v1.0/drives/${item.parentReference.driveId}/items/${item.id}/content`,{headers:{Authorization:'Bearer '+accessToken}});
   const pdf=await pdfjsLib.getDocument({data:buf}).promise;
+  const totalPages = pdf.numPages;
+  if (onProgress) onProgress(0, totalPages, label);
   let extracted=0;
-  for(let p=1;p<=pdf.numPages;p++){
+  for(let p=1;p<=totalPages;p++){
     const page=await pdf.getPage(p);
     const tc=await page.getTextContent();
     const txt=tc.items.map(it=>it.str).join(" ").replace(/\s+/g," ").trim();
@@ -304,35 +381,51 @@ async function fetchSinglePdfFromOneDrive(link, idx){
         extracted++;
       }
     }
+    if (onProgress) onProgress(p, totalPages, label);
   }
-  addChat("Bot",`Parsed PDF ${idx+1}: ${extracted} chunks.`);
+  addChat("Bot",`Parsed ${label || ('PDF '+(idx+1))}: ${extracted} chunks.`);
 }
 
+// ===== Load KB + PDFs (with status) =====
 async function fetchExcelKBAndPdfs(){
-  showLoading("Searching… loading KB and scanning PDFs");
   try{
+    setStatus('Loading Knowledge…', 0);
     await resolveWorkbookBase();
     const knowledgeTexts = await readKnowledgeRows();
     kb = knowledgeTexts.map(text => ({ text }));
     addChat("Bot","Excel KB loaded.");
 
     const pdfEntries = await readPdfLinksFromConfig();
+    if (!pdfEntries.length){
+      clearStatus();
+      renderSources();
+      addChat("Bot","No PDFs configured in Excel Config sheet.");
+      return;
+    }
+    setStatus('Opening PDFs…', 0);
     pdfWebUrls=[]; pdfNames=[]; docKb=[];
     for(let idx=0; idx<pdfEntries.length; idx++){
       const {name,link}=pdfEntries[idx];
       pdfNames[idx] = name || 'PDF';
-      try{ await fetchSinglePdfFromOneDrive(link, idx); }
-      catch(e){ addChat("Bot",`Error loading PDF ${idx+1}: ${e.message}`); }
+      try{
+        await fetchSinglePdfFromOneDrive(link, idx, pdfNames[idx], (page,total,label)=>{
+          const text = total ? `Scanning ${label}: ${page}/${total} page(s)…` : `Scanning ${label}…`;
+          const ratio = total ? (page/total) : 0;
+          setStatus(text, ratio);
+        });
+      }catch(e){
+        addChat("Bot",`Error loading PDF ${idx+1}: ${e.message}`);
+      }
     }
+    clearStatus();
     const total=docKb.length;
     const tag=document.getElementById("pdfCount");
     tag.textContent=`PDF: ${total}`; tag.classList.remove("hidden");
     renderSources();
     addChat("Bot",`Indexed ${total} chunks from ${pdfEntries.length} PDF(s).`);
   }catch(err){
+    clearStatus();
     addChat("Bot","Error loading KB/PDFs: "+err.message);
-  }finally{
-    hideLoading();
   }
 }
 
