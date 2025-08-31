@@ -13,7 +13,7 @@
   .msg{margin:6px 0;padding:8px;border-radius:8px;max-width:80%;white-space:pre-wrap;}
   .user{background:rgba(99,102,241,0.15);align-self:flex-end;}
   .bot{background:rgba(255,255,255,0.03);align-self:flex-start;}
-  .controls{display:flex;gap:8px;margin-top:8px;flex-wrap:wrap}
+  .controls{display:flex;gap:8px;margin-top:8px;flex-wrap:wrap; align-items:flex-start}
   .btn{background:#7c3aed;border:none;padding:6px 12px;border-radius:8px;color:white;cursor:pointer;}
   .small{opacity:.8;font-size:12px;margin-left:8px}
   #userInput {min-width:260px; font-family: inherit; line-height:1.4; resize:none; overflow:hidden;}
@@ -27,6 +27,8 @@
   .sourceTag a{color:#cbd5ff;text-decoration:none}
   .sourceTag a:hover{text-decoration:underline}
   .sourcesWrap{display:flex;flex-wrap:wrap}
+  .notice{background:#13213d;border:1px solid #23386b;color:#cfe0ff;padding:6px 10px;border-radius:8px;margin-bottom:6px;font-size:12px;display:flex;align-items:center;gap:8px;}
+  .notice::before{content:'⚠️';}
 
   /* Spinner for status */
   .spinner { width:14px; height:14px; border:2px solid rgba(255,255,255,0.25); border-top-color:#cbd5ff; border-radius:50%; animation:spin 0.9s linear infinite; }
@@ -44,17 +46,22 @@
   <h2>TALENT MODULE COACH</h2>
   <div>
     Mode: <span id="modeLabel">User</span>
-    <span class="small">— Excel KB + Multi‑PDF (Config‑driven via OneDrive)</span>
+    <span class="small">— Excel KB + Multi‑PDF (Config‑driven via OneDrive) — User mode reads from cache</span>
   </div>
   <div id="chatbox"></div>
 
   <div class="controls">
-    <textarea id="userInput" placeholder="Ask a question or use /learn, /passwd (admin)" rows="1" style="flex:1;"></textarea>
-    <button id="sendBtn" class="btn">Send</button>
-    <button id="adminToggleBtn" class="btn" title="Sign in & verify admin password">Admin Login</button>
-    <button id="reloadBtn" class="btn" title="Reload KB + PDFs">Reload</button>
-    <button id="switchBtn" class="btn" title="Switch to another Microsoft account/tenant">Switch Account</button>
-    <span id="pdfCount" class="tag hidden">PDF: 0</span>
+    <div style="flex:1; min-width:280px;">
+      <div class="notice">Always review TMCoach answers and never enter PII.</div>
+      <textarea id="userInput" placeholder="Ask question + include the module. Ex. Interview Scheduling - Recruiting" rows="1" style="width:100%;"></textarea>
+    </div>
+    <div style="display:flex;flex-direction:column;gap:8px;">
+      <button id="sendBtn" class="btn">Send</button>
+      <button id="adminToggleBtn" class="btn" title="Sign in & refresh cache (Admin only)">Admin Login</button>
+      <button id="reloadBtn" class="btn" title="Reload cache (no sign‑in)">Reload</button>
+      <button id="switchBtn" class="btn hidden" title="Switch to another Microsoft account/tenant (Admin)">Switch Account</button>
+      <span id="pdfCount" class="tag hidden">PDF: 0</span>
+    </div>
   </div>
 
   <!-- Tiny Sources panel -->
@@ -82,6 +89,64 @@ const shareLink   = "https://xvxky-my.sharepoint.com/:x:/g/personal/jacjessie_xv
 let kb = [], hiddenKb = [], docKb = [], pdfWebUrls = [], pdfNames = [];
 let isAdmin = false, accessToken = null, workbookBase = null;
 let adminSecret = { mode: "plain", plain: "admin123" };
+
+// ===== CACHE (Option 2) =====
+const CACHE_META_KEY = 'tmc_cache_meta_v1';
+const CACHE_DOC_PREFIX = 'tmc_cache_doc_v1_';
+const DOC_CHUNK_SIZE = 220; // chunks per localStorage item
+
+function saveCacheToLocal(){
+  try{
+    // Clear old parts
+    Object.keys(localStorage).forEach(k => { if (k.startsWith(CACHE_DOC_PREFIX)) localStorage.removeItem(k); });
+    // Split docKb into parts
+    const parts = Math.ceil(docKb.length / DOC_CHUNK_SIZE);
+    for(let i=0;i<parts;i++){
+      const slice = docKb.slice(i*DOC_CHUNK_SIZE, (i+1)*DOC_CHUNK_SIZE);
+      localStorage.setItem(CACHE_DOC_PREFIX + i, JSON.stringify(slice));
+    }
+    const meta = {
+      ts: Date.now(),
+      kb, pdfWebUrls, pdfNames,
+      docParts: parts, chunkSize: DOC_CHUNK_SIZE
+    };
+    localStorage.setItem(CACHE_META_KEY, JSON.stringify(meta));
+    addChat("Bot","Cached KB + PDF index for User mode.");
+  }catch(err){
+    addChat("Bot","Cache save failed (storage quota?): " + err.message);
+  }
+}
+function loadCacheFromLocal(){
+  try{
+    const metaRaw = localStorage.getItem(CACHE_META_KEY);
+    if (!metaRaw) return false;
+    const meta = JSON.parse(metaRaw);
+    const { ts, kb:ckb, pdfWebUrls:cu, pdfNames:cn, docParts } = meta;
+    const arr = [];
+    for(let i=0;i<docParts;i++){
+      const part = localStorage.getItem(CACHE_DOC_PREFIX + i);
+      if (part) arr.push(...JSON.parse(part));
+    }
+    kb = Array.isArray(ckb) ? ckb : [];
+    pdfWebUrls = Array.isArray(cu) ? cu : [];
+    pdfNames = Array.isArray(cn) ? cn : [];
+    docKb = arr;
+    renderSources();
+    const when = new Date(ts).toLocaleString();
+    addChat("Bot", `Loaded cached KB/PDFs (updated ${when}). No sign‑in needed.`);
+    // Update UI counts
+    const tag=document.getElementById("pdfCount");
+    tag.textContent=`PDF: ${docKb.length}`; tag.classList.remove("hidden");
+    return true;
+  }catch(err){
+    addChat("Bot","Cache read failed: " + err.message);
+    return false;
+  }
+}
+function clearCache(){
+  Object.keys(localStorage).forEach(k => { if (k.startsWith(CACHE_DOC_PREFIX) || k===CACHE_META_KEY) localStorage.removeItem(k); });
+  addChat("Bot","Local cache cleared.");
+}
 
 // ===== UI =====
 function addChat(sender, html){
@@ -153,37 +218,79 @@ userInput.addEventListener("input", function(){
   this.style.height = this.scrollHeight + "px";
 });
 
-// ===== Search (Option 1: keyword filter + fuzzy rank) =====
+// ===== Query parsing: "question - Module" =====
+function parseQueryParts(q){
+  const m = q.split(/\s*[-–—:|]\s*/);
+  if (m.length >= 2){
+    const module = m[m.length - 1].trim();
+    const keywords = m.slice(0, m.length - 1).join(' ').trim();
+    return { keywords, module };
+  }
+  return { keywords: q.trim(), module: '' };
+}
+function pickModuleIndex(module){
+  if (!module) return null;
+  let bestIdx = null, bestScore = 0;
+  const ml = module.toLowerCase();
+  for (let i=0;i<pdfNames.length;i++){
+    const nm = (pdfNames[i]||'').toLowerCase();
+    const s = normalizedSimilarity(ml, nm);
+    if (s > bestScore){ bestScore = s; bestIdx = i; }
+  }
+  return (bestScore >= 0.42) ? bestIdx : null;
+}
+
+// ===== Search (Excel KB + PDF, module only narrows PDFs) =====
 function levenshtein(a,b){if(!a||!b) return a||b?Math.max(a.length,b.length):0;const m=a.length,n=b.length,dp=Array(m+1).fill(0).map(()=>Array(n+1).fill(0));for(let i=0;i<=m;i++)dp[i][0]=i;for(let j=0;j<=n;j++)dp[0][j]=j;for(let i=1;i<=m;i++)for(let j=1;j<=n;j++){const c=a[i-1]===b[j-1]?0:1;dp[i][j]=Math.min(dp[i-1][j]+1,dp[i][j-1]+1,dp[i-1][j-1]+c);}return dp[m][n];}
 function normalizedSimilarity(a,b){a=(a||"").toLowerCase();b=(b||"").toLowerCase();const d=levenshtein(a,b),M=Math.max(a.length,b.length);return M?1-d/M:1;}
 function scoreMatch(q,t){return normalizedSimilarity(q,t);} 
-function searchKB(query){
-  const words = query.toLowerCase().split(/\s+/).filter(w=>w.length>2);
-  const pool = [...kb, ...docKb];
-  if (isAdmin) pool.push(...hiddenKb);
-  const scored = pool
-    .filter(k => words.some(w => k.text.toLowerCase().includes(w))) // filter first
-    .map(k => {
-      let score = scoreMatch(query, k.text);
-      if (k.source === 'PDF') score += 0.15; // slight boost
+function searchAll(query){
+  const { keywords, module } = parseQueryParts(query);
+  const words = keywords.toLowerCase().split(/\s+/).filter(w=>w.length>2);
+
+  // PDF pool (respect module scope)
+  let pdfPool = [...docKb];
+  const modIdx = pickModuleIndex(module);
+  if (modIdx !== null) pdfPool = pdfPool.filter(k => k.pdfIndex === modIdx);
+
+  // Excel pool
+  let kbPool = kb.map(text => ({ text, source:'KB' }));
+
+  // If no keywords provided and only module given, show only PDFs (avoid flooding with all KB rows)
+  let combined = (words.length === 0) ? pdfPool : [...pdfPool, ...kbPool];
+
+  // Filter by keywords
+  let candidates = words.length ? combined.filter(k => words.some(w => k.text.toLowerCase().includes(w))) : combined;
+
+  const scored = candidates.map(k => {
+      const qForScore = keywords || module || '';
+      let score = scoreMatch(qForScore, k.text);
+      if (k.source === 'PDF') score += 0.15;            // PDF slight boost
+      if (k.source === 'KB' && modIdx !== null) score -= 0.05; // if module selected, prefer PDF a bit
       return { item:k, score };
     })
     .sort((a,b)=>b.score-a.score)
-    .slice(0,8);
-  return scored;
+    .slice(0, 10);
+
+  return { hits: scored, modIdx, keywords, module };
 }
 function composeReply(query){
-  const hits=searchKB(query);
-  if(hits.length===0)return `No relevant info found.\nTry Dayforce Help: https://help.dayforce.com/`;
-  let reply="Keyword Search:\n\n| Keyword |\n|---------|\n| "+query+" |\n\n";
+  const { hits, modIdx, keywords, module } = searchAll(query);
+  if(hits.length===0)return `No relevant info found.\nTip: Include a module after a dash, e.g. Interview Scheduling - Recruiting`;
+
+  const scope = (modIdx !== null) ? (pdfNames[modIdx] || module || 'PDF') : (module ? module : 'All');
+
+  let reply="Keyword & Module:\n\n| Keyword | Module |\n|---------|--------|\n| "+(keywords||'(none)')+" | "+scope+" |\n\n";
   reply+="Answers Found:\n\n| # | Snippet | Source |\n|---|----------|--------|\n";
-  const regex=new RegExp(`(${query})`,"ig");
+  const regex = keywords ? new RegExp(`(${keywords})`,"ig") : null;
   hits.forEach((h,i)=>{
     let snippet=h.item.text.replace(/\n/g," ");
-    if(snippet.length>180)snippet=snippet.slice(0,180)+"...";
-    snippet=snippet.replace(regex,"<mark>$1</mark>");
-    let src="Excel";
-    if(h.item.source==='PDF'){
+    if(snippet.length>220)snippet=snippet.slice(0,220)+"...";
+    if (regex) snippet=snippet.replace(regex,"<mark>$1</mark>");
+    let src;
+    if(h.item.source==='KB'){
+      src = 'Excel KB';
+    } else {
       const web=pdfWebUrls[h.item.pdfIndex]||"";
       const label=(pdfNames[h.item.pdfIndex]||'PDF');
       src=web?`<a href="${web}#page=${h.item.page}" target="_blank">${label} p.${h.item.page}</a>`:`${label} p.${h.item.page}`;
@@ -209,15 +316,14 @@ function toGraphShareId(url){let b=btoa(url).replace(/=+$/,'').replace(/\+/g,'-'
 
 // ===== OAuth =====
 function loginMicrosoftGraph(){const tenant="common";const params=new URLSearchParams({client_id:clientId,response_type:"token",redirect_uri:redirectUri,scope:scopes,prompt:"select_account"});window.location.href=`https://login.microsoftonline.com/${tenant}/oauth2/v2.0/authorize?${params}`;}
-function getTokenFromHash(){if(window.location.hash){const p=new URLSearchParams(window.location.hash.substring(1));const t=p.get("access_token");if(t){accessToken=t;window.location.hash="";fetchExcelKBAndPdfs();}}}
+function getTokenFromHash(){if(window.location.hash){const p=new URLSearchParams(window.location.hash.substring(1));const t=p.get("access_token");if(t){accessToken=t;window.location.hash="";fetchExcelKBAndPdfs(true);}}}
 
-// ===== Excel KB + Config (multi‑PDF) =====
+// ===== Excel KB + Config PDFs =====
 async function resolveWorkbookBase(){if(workbookBase)return;const shareId=toGraphShareId(shareLink);const item=await gFetch(`https://graph.microsoft.com/v1.0/shares/${shareId}/driveItem`,{headers:{Authorization:"Bearer "+accessToken}});workbookBase=`https://graph.microsoft.com/v1.0/drives/${item.parentReference.driveId}/items/${item.id}/workbook`;}
 
-// Read KB rows
+// Read KB rows (table or range)
 async function readKnowledgeRows(){
   try{
-    // Prefer a table if it exists, otherwise range (A2:A)
     const tData = await gFetch(`${workbookBase}/tables`, { headers:{ Authorization:'Bearer '+accessToken } });
     const t = (tData.value||[]).find(x => (x.name||'').toLowerCase()==='knowledgetable');
     if (t){
@@ -235,10 +341,9 @@ async function readKnowledgeRows(){
   }
 }
 
-// Read PDF links (support ConfigTable or ranges)
+// Read PDF links (ConfigTable or ranges)
 async function readPdfLinksFromConfig(){
   let entries=[];
-  // Try table first (ConfigTable: Name | PDFLink)
   try{
     const tData = await gFetch(`${workbookBase}/tables`, { headers:{ Authorization:'Bearer '+accessToken } });
     const t = (tData.value||[]).find(x => (x.name||'').toLowerCase()==='configtable');
@@ -257,16 +362,12 @@ async function readPdfLinksFromConfig(){
       if (entries.length) return entries;
     }
   }catch(e){ /* fall back to ranges */ }
-
-  // Range A2:B (Name | Link)
   try{
     const data=await gFetch(`${workbookBase}/worksheets('Config')/range(address='A2:B200')`,{headers:{Authorization:'Bearer '+accessToken}});
     const vals=Array.isArray(data.values)?data.values:[];
     entries=vals.map(r=>({name:String(r[0]||"").trim(),link:String(r[1]||"").trim()})).filter(e=>/^https?:\/\//i.test(e.link));
     if(entries.length) return entries;
   }catch(e){ /* continue */ }
-
-  // Range A2:A (Link only)
   try{
     const data=await gFetch(`${workbookBase}/worksheets('Config')/range(address='A2:A200')`,{headers:{Authorization:'Bearer '+accessToken}});
     const vals=Array.isArray(data.values)?data.values:[];
@@ -275,88 +376,6 @@ async function readPdfLinksFromConfig(){
     addChat("Bot","Config sheet missing or PDF links not found.");
   }
   return entries;
-}
-
-// Admin secret + helpers
-async function readAdminSecret(){
-  try{
-    await resolveWorkbookBase();
-    const r = await gFetch(`${workbookBase}/worksheets('Admin')/range(address='A1:C2')`, { headers: { Authorization:'Bearer '+accessToken } });
-    const grid = r.values || [];
-    const a1 = (grid[0] && grid[0][0]) ? String(grid[0][0]) : "";
-    const b1 = (grid[0] && grid[0][1]) ? String(grid[0][1]) : "";
-    const c1 = (grid[0] && grid[0][2]) ? String(grid[0][2]) : "";
-    const a2 = (grid[1] && grid[1][0]) ? String(grid[1][0]) : "";
-    const b2 = (grid[1] && grid[1][1]) ? String(grid[1][1]) : "";
-    const c2 = (grid[1] && grid[1][2]) ? String(grid[1][2]) : "";
-    if (a1 === "PasswordHash" && b1 === "Salt" && c1 === "Kdf" && a2 && b2 && c2) {
-      adminSecret = { mode:"hashed", hashB64:a2, saltB64:b2, kdf:c2 };
-      return adminSecret;
-    }
-    const a2PlainRes = await gFetch(`${workbookBase}/worksheets('Admin')/range(address='A2')`, { headers: { Authorization:'Bearer '+accessToken } });
-    const v2 = a2PlainRes.values && a2PlainRes.values[0] && a2PlainRes.values[0][0] ? String(a2PlainRes.values[0][0]) : '';
-    if (v2) { adminSecret = { mode:"plain", plain:v2 }; return adminSecret; }
-    const a1PlainRes = await gFetch(`${workbookBase}/worksheets('Admin')/range(address='A1')`, { headers: { Authorization:'Bearer '+accessToken } });
-    const v1 = a1PlainRes.values && a1PlainRes.values[0] && a1PlainRes.values[0][0] ? String(a1PlainRes.values[0][0]) : '';
-    adminSecret = { mode:"plain", plain: (v1 && v1.toLowerCase()!=='password') ? v1 : 'admin123' };
-    return adminSecret;
-  }catch(err){ addChat("Bot","Could not read Admin sheet for password. Using default."); adminSecret = { mode:"plain", plain:"admin123" }; return adminSecret; }
-}
-function b64enc(arrBuf){ const bytes=new Uint8Array(arrBuf); let bin=""; for(let i=0;i<bytes.length;i++) bin+=String.fromCharCode(bytes[i]); return btoa(bin); }
-function b64dec(b64){ const bin=atob(b64); const bytes=new Uint8Array(bin.length); for(let i=0;i<bin.length;i++) bytes[i]=bin.charCodeAt(i); return bytes.buffer; }
-function randomSalt(len=16){ const buf=new Uint8Array(len); crypto.getRandomValues(buf); return b64enc(buf.buffer); }
-async function pbkdf2(password, saltB64, iterations=100000, length=32){
-  const enc=new TextEncoder();
-  const keyMaterial=await crypto.subtle.importKey("raw", enc.encode(password), { name:"PBKDF2" }, false, ["deriveBits"]);
-  const salt=b64dec(saltB64);
-  const bits=await crypto.subtle.deriveBits({ name:"PBKDF2", hash:"SHA-256", salt, iterations }, keyMaterial, length*8);
-  return b64enc(bits);
-}
-async function verifyAdminPassword(input){
-  if (adminSecret.mode === "plain") return input === adminSecret.plain;
-  const { saltB64, hashB64, kdf } = adminSecret;
-  if (!saltB64 || !hashB64 || !kdf) return false;
-  const parts = kdf.split("-");
-  const iterations = parts[0] === "PBKDF2" ? (parseInt(parts[1],10) || 100000) : 100000;
-  const derivedB64 = await pbkdf2(input, saltB64, iterations, 32);
-  return derivedB64 === hashB64;
-}
-async function ensureKnowledgeTable(){
-  await resolveWorkbookBase();
-  const tData = await gFetch(`${workbookBase}/tables`, { headers:{ Authorization:'Bearer '+accessToken } });
-  let t = (tData.value||[]).find(x => (x.name||'').toLowerCase()==='knowledgetable');
-  if (!t){
-    const added = await gFetch(`${workbookBase}/tables/add`, {
-      method:'POST', headers:{ Authorization:'Bearer '+accessToken, 'Content-Type':'application/json' },
-      body: JSON.stringify({ address:"Knowledge!A1:A1", hasHeaders:true })
-    });
-    try{ await gFetch(`${workbookBase}/worksheets('Knowledge')/range(address='A1')`, { method:'PATCH', headers:{ Authorization:'Bearer '+accessToken, 'Content-Type':'application/json' }, body: JSON.stringify({ values:[["Knowledge"]] }) }); }catch(e){}
-    try{ await gFetch(`${workbookBase}/tables('${added.id}')`, { method:'PATCH', headers:{ Authorization:'Bearer '+accessToken, 'Content-Type':'application/json' }, body: JSON.stringify({ name:"KnowledgeTable" }) }); }catch(e){}
-    t = { name:"KnowledgeTable" };
-  }
-  return t;
-}
-async function appendKnowledgeToExcel(text){
-  try{
-    const t = await ensureKnowledgeTable();
-    await gFetch(`${workbookBase}/tables('${t.name}')/rows/add`, {
-      method:'POST', headers:{ Authorization:'Bearer '+accessToken, 'Content-Type':'application/json' },
-      body: JSON.stringify({ values:[[text]] })
-    });
-    addChat("Bot","Knowledge saved to Excel.");
-  }catch(err){ addChat("Bot","Error writing Knowledge: "+err.message); }
-}
-async function updateAdminPassword(newPwd){
-  try{
-    await resolveWorkbookBase();
-    const saltB64 = randomSalt(16);
-    const derivedB64 = await pbkdf2(newPwd, saltB64, 100000, 32);
-    const kdfDesc = "PBKDF2-100000-SHA256-32";
-    await gFetch(`${workbookBase}/worksheets('Admin')/range(address='A1:C1')`, { method:'PATCH', headers:{ Authorization:'Bearer '+accessToken, 'Content-Type':'application/json' }, body: JSON.stringify({ values: [["PasswordHash","Salt","Kdf"]] }) });
-    await gFetch(`${workbookBase}/worksheets('Admin')/range(address='A2:C2')`, { method:'PATCH', headers:{ Authorization:'Bearer '+accessToken, 'Content-Type':'application/json' }, body: JSON.stringify({ values: [[derivedB64, saltB64, kdfDesc]] }) });
-    adminSecret = { mode:"hashed", hashB64:derivedB64, saltB64, kdf:kdfDesc };
-    addChat("Bot","Admin password updated (hashed) in Excel.");
-  }catch(err){ addChat("Bot","Failed to write hashed password: "+err.message); }
 }
 
 // ===== PDF fetch & indexing (with progress callback) =====
@@ -386,13 +405,14 @@ async function fetchSinglePdfFromOneDrive(link, idx, label, onProgress){
   addChat("Bot",`Parsed ${label || ('PDF '+(idx+1))}: ${extracted} chunks.`);
 }
 
-// ===== Load KB + PDFs (with status) =====
-async function fetchExcelKBAndPdfs(){
+// ===== Load Excel KB + PDFs (with status) =====
+async function fetchExcelKBAndPdfs(isAdminRefresh=false){
   try{
     setStatus('Loading Knowledge…', 0);
     await resolveWorkbookBase();
+
     const knowledgeTexts = await readKnowledgeRows();
-    kb = knowledgeTexts.map(text => ({ text }));
+    kb = knowledgeTexts; // plain strings
     addChat("Bot","Excel KB loaded.");
 
     const pdfEntries = await readPdfLinksFromConfig();
@@ -400,6 +420,7 @@ async function fetchExcelKBAndPdfs(){
       clearStatus();
       renderSources();
       addChat("Bot","No PDFs configured in Excel Config sheet.");
+      if (isAdminRefresh) saveCacheToLocal();
       return;
     }
     setStatus('Opening PDFs…', 0);
@@ -423,6 +444,7 @@ async function fetchExcelKBAndPdfs(){
     tag.textContent=`PDF: ${total}`; tag.classList.remove("hidden");
     renderSources();
     addChat("Bot",`Indexed ${total} chunks from ${pdfEntries.length} PDF(s).`);
+    if (isAdminRefresh) saveCacheToLocal();
   }catch(err){
     clearStatus();
     addChat("Bot","Error loading KB/PDFs: "+err.message);
@@ -437,16 +459,7 @@ async function handleInput(){
   document.getElementById("userInput").style.height="auto";
   addChat("User",val);
 
-  // Admin commands
-  if(isAdmin&&val.startsWith('/learn ')){
-    const text=val.slice(7).trim();
-    if(!text) return addChat("Bot","Nothing to learn.");
-    hiddenKb.push({text});
-    addChat("Bot","Adding knowledge to Excel…");
-    await appendKnowledgeToExcel(text);
-    await fetchExcelKBAndPdfs();
-    return;
-  }
+  // Hidden admin commands (not exposed in UI)
   if(isAdmin&&val.startsWith('/passwd ')){
     const newPwd=val.slice(8).trim();
     if(!newPwd) return addChat("Bot","Password cannot be empty.");
@@ -459,30 +472,87 @@ async function handleInput(){
 document.getElementById("sendBtn").addEventListener("click", handleInput);
 document.getElementById("userInput").addEventListener("keydown", e=>{ if(e.key==="Enter" && !e.shiftKey) { e.preventDefault(); handleInput(); } });
 
-document.getElementById("reloadBtn").addEventListener("click", ()=>{ if(accessToken) fetchExcelKBAndPdfs(); else addChat("Bot","Please sign in first (Admin Login)."); });
+// Reload button: user mode -> just reload from cache; admin mode -> refresh from Graph and re-save cache.
+document.getElementById("reloadBtn").addEventListener("click", ()=>{
+  if (isAdmin && accessToken) { fetchExcelKBAndPdfs(true); }
+  else {
+    const ok = loadCacheFromLocal();
+    if (!ok) addChat("Bot","No local cache found yet. An admin must sign in and refresh cache first.");
+  }
+});
 document.getElementById("switchBtn").addEventListener("click", ()=>{
   accessToken=null; workbookBase=null; kb=[]; hiddenKb=[]; docKb=[]; pdfWebUrls=[]; pdfNames=[]; isAdmin=false;
   document.getElementById('modeLabel').textContent='User';
-  document.getElementById('pdfCount').classList.add('hidden');
+  document.getElementById('switchBtn').classList.add('hidden');
   renderSources();
   addChat("Bot","Switching account… redirecting to Microsoft sign-in.");
   loginMicrosoftGraph();
 });
 document.getElementById("adminToggleBtn").addEventListener("click", async ()=>{
-  if (isAdmin){ isAdmin=false; document.getElementById('modeLabel').textContent='User'; addChat("Bot","Switched to User mode."); return; }
+  if (isAdmin){
+    isAdmin=false; document.getElementById('modeLabel').textContent='User';
+    document.getElementById('switchBtn').classList.add('hidden');
+    addChat("Bot","Switched to User mode.");
+    return;
+  }
   if (!accessToken){ addChat("Bot","Opening Microsoft sign-in…"); return loginMicrosoftGraph(); }
   await resolveWorkbookBase();
-  await readAdminSecret();
-  const pwd = prompt("Enter Admin Password:");
-  if (pwd == null) return;
-  const ok = await verifyAdminPassword(pwd);
-  if (!ok) return alert("Wrong password.");
-  isAdmin = true; document.getElementById('modeLabel').textContent='Admin';
-  addChat("Bot","Admin mode unlocked! Commands: /learn <text>, /passwd <new>");
+  // For Option 2, we don't require password to refresh cache; but we keep it available.
+  isAdmin = true;
+  document.getElementById('modeLabel').textContent='Admin';
+  document.getElementById('switchBtn').classList.remove('hidden');
+  addChat("Bot","Admin mode: click Reload to refresh cache from OneDrive.\nAfter it finishes, users won’t need to sign in.");
+  // Immediately refresh cache on entering admin if desired:
+  // fetchExcelKBAndPdfs(true);
 });
 
+// ===== Admin helpers (for future password feature) =====
+function b64enc(arrBuf){ const bytes=new Uint8Array(arrBuf); let bin=""; for(let i=0;i<bytes.length;i++) bin+=String.fromCharCode(bytes[i]); return btoa(bin); }
+function b64dec(b64){ const bin=atob(b64); const bytes=new Uint8Array(bin.length); for(let i=0;i<bin.length;i++) bytes[i]=bin.charCodeAt(i); return bytes.buffer; }
+function randomSalt(len=16){ const buf=new Uint8Array(len); crypto.getRandomValues(buf); return b64enc(buf.buffer); }
+async function pbkdf2(password, saltB64, iterations=100000, length=32){
+  const enc=new TextEncoder();
+  const keyMaterial=await crypto.subtle.importKey("raw", enc.encode(password), { name:"PBKDF2" }, false, ["deriveBits"]);
+  const salt=b64dec(saltB64);
+  const bits=await crypto.subtle.deriveBits({ name:"PBKDF2", hash:"SHA-256", salt, iterations }, keyMaterial, length*8);
+  return b64enc(bits);
+}
+async function updateAdminPassword(newPwd){
+  try{
+    await resolveWorkbookBase();
+    const saltB64 = randomSalt(16);
+    const derivedB64 = await pbkdf2(newPwd, saltB64, 100000, 32);
+    const kdfDesc = "PBKDF2-100000-SHA256-32";
+    await gFetch(`${workbookBase}/worksheets('Admin')/range(address='A1:C1')`, { method:'PATCH', headers:{ Authorization:'Bearer '+accessToken, 'Content-Type':'application/json' }, body: JSON.stringify({ values: [["PasswordHash","Salt","Kdf"]] }) });
+    await gFetch(`${workbookBase}/worksheets('Admin')/range(address='A2:C2')`, { method:'PATCH', headers:{ Authorization:'Bearer '+accessToken, 'Content-Type':'application/json' }, body: JSON.stringify({ values: [[derivedB64, saltB64, kdfDesc]] }) });
+    addChat("Bot","Admin password updated (hashed) in Excel.");
+  }catch(err){ addChat("Bot","Failed to write hashed password: "+err.message); }
+}
+
+// ===== Graph helpers used above =====
+async function gFetch(url,opt={}){
+  const res=await fetch(url,opt);
+  if(!res.ok){
+    let t=""; try{t=await res.text();}catch{};
+    throw new Error(`HTTP ${res.status} ${res.statusText}\n${t}`);
+  }
+  const ct=res.headers.get("content-type")||"";
+  if(ct.includes("json"))return res.json();
+  if(ct.includes("pdf")||ct.includes("octet"))return res.arrayBuffer();
+  return res.text();
+}
+function toGraphShareId(url){let b=btoa(url).replace(/=+$/,'').replace(/\+/g,'-').replace(/\//g,'_');return 'u!'+b;}
+
 // ===== Bootstrap =====
-function init(){ getTokenFromHash(); if (!accessToken){ addChat("Bot","Click Admin Login to sign in."); } }
+function init(){
+  // Try to load cache first for User mode
+  const ok = loadCacheFromLocal();
+  if (!ok){
+    addChat("Bot","No cached data yet. An admin should sign in and press Reload to build the cache.");
+  }
+  // Token capture (in case admin just returned from login)
+  getTokenFromHash();
+}
 init();
 </script>
 </body>
