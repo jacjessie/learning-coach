@@ -2,25 +2,21 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8" />
-<title>Coach JeetPT</title>
+<title>TALENT MODULE COACH</title>
 <script src="https://cdn.jsdelivr.net/npm/xlsx/dist/xlsx.full.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js"></script>
 <style>
   body {font-family: Arial, system-ui, -apple-system; background:#07102a;color:#e6eef8;margin:20px;}
-  .card{background:#0b1220;padding:14px;border-radius:10px;margin-bottom:20px;}
-  #chatbox{height:420px;overflow:auto;border:1px solid rgba(255,255,255,0.06);padding:8px;border-radius:6px;display:flex;flex-direction:column;}
-  .msg{margin:6px 0;padding:6px;border-radius:6px;max-width:80%;white-space:pre-wrap;}
+  .card{background:#0b1220;padding:14px;border-radius:14px;margin-bottom:20px;}
+  #chatbox{height:420px;overflow:auto;border:1px solid rgba(255,255,255,0.06);padding:8px;border-radius:8px;display:flex;flex-direction:column;}
+  .msg{margin:6px 0;padding:8px;border-radius:8px;max-width:80%;white-space:pre-wrap;}
   .user{background:rgba(99,102,241,0.15);align-self:flex-end;}
   .bot{background:rgba(255,255,255,0.03);align-self:flex-start;}
   .controls{display:flex;gap:8px;margin-top:8px;flex-wrap:wrap}
-  .btn{background:#7c3aed;border:none;padding:6px 12px;border-radius:6px;color:white;cursor:pointer;}
+  .btn{background:#7c3aed;border:none;padding:6px 12px;border-radius:8px;color:white;cursor:pointer;}
   .small{opacity:.8;font-size:12px;margin-left:8px}
-  #userInput {
-  min-width: 260px;
-  font-family: inherit;
-  line-height: 1.4;
-}
+  #userInput {min-width:260px; font-family: inherit; line-height:1.4; resize:none; overflow:hidden;}
   .hidden{display:none}
   .tag{display:inline-block;background:#1a2448;border:1px solid #24305e;border-radius:14px;padding:2px 8px;margin-left:6px;font-size:12px;opacity:.9}
   .chatTable{border-collapse:collapse;margin:6px 0;width:100%;font-size:13px;}
@@ -31,12 +27,17 @@
   .sourceTag a{color:#cbd5ff;text-decoration:none}
   .sourceTag a:hover{text-decoration:underline}
   .sourcesWrap{display:flex;flex-wrap:wrap}
+
+  /* Loading indicator */
+  .loadingRow { display:flex; align-items:center; gap:10px; }
+  .spinner { width:14px; height:14px; border:2px solid rgba(255,255,255,0.25); border-top-color:#cbd5ff; border-radius:50%; animation:spin 0.9s linear infinite; }
+  @keyframes spin { from { transform: rotate(0deg);} to { transform: rotate(360deg);} }
 </style>
 </head>
 <body>
 
 <div class="card">
-  <h2>Coach JeetPT</h2>
+  <h2>TALENT MODULE COACH</h2>
   <div>
     Mode: <span id="modeLabel">User</span>
     <span class="small">— Excel KB + Multi‑PDF (Config‑driven via OneDrive)</span>
@@ -44,7 +45,7 @@
   <div id="chatbox"></div>
 
   <div class="controls">
-    <textarea id="userInput" placeholder="Ask a question or use /learn, /passwd (admin)" rows="1" style="flex:1; resize:none; overflow:hidden;"></textarea>
+    <textarea id="userInput" placeholder="Ask a question or use /learn, /passwd (admin)" rows="1" style="flex:1;"></textarea>
     <button id="sendBtn" class="btn">Send</button>
     <button id="adminToggleBtn" class="btn" title="Sign in & verify admin password">Admin Login</button>
     <button id="reloadBtn" class="btn" title="Reload KB + PDFs">Reload</button>
@@ -64,20 +65,13 @@
 const clientId    = "7f3c8426-3ef5-4e28-acf0-5f51224bc0a6";
 const redirectUri = "https://jacjessie.github.io/learning-coach/";
 const scopes      = "Files.ReadWrite.All User.Read";
-
-// Excel workbook link (KB + Admin + Config)
 const shareLink   = "https://xvxky-my.sharepoint.com/:x:/g/personal/jacjessie_xvxky_onmicrosoft_com/Ef4Mr6_ZWd1Dm0D6mAe2ffkBI4syJuD6xhj-ekpItxdyXw?e=8VIx5C";
 
 // ===== STATE =====
-let kb = [];
-let hiddenKb = []; // session-only admin additions
-let docKb = []; // { text, source:'PDF', page, pdfIndex }
-let pdfWebUrls = []; // index -> webUrl for each PDF from Config
-let pdfNames  = []; // index -> label to show in UI
-let isAdmin = false;
-let accessToken = null;
-let workbookBase = null;
+let kb = [], hiddenKb = [], docKb = [], pdfWebUrls = [], pdfNames = [];
+let isAdmin = false, accessToken = null, workbookBase = null;
 let adminSecret = { mode: "plain", plain: "admin123" };
+let loadingEl = null;
 
 // ===== UI =====
 function addChat(sender, html){
@@ -87,7 +81,6 @@ function addChat(sender, html){
   const box = document.getElementById("chatbox");
   box.appendChild(el); box.scrollTop = box.scrollHeight;
 }
-
 function markdownTablesToHtml(md){
   const blocks = (md || "").split(/\n\s*\n/);
   return blocks.map(block => {
@@ -96,7 +89,7 @@ function markdownTablesToHtml(md){
       return "<table class='chatTable'>" +
         rows.map((row, idx) => {
           const cols = row.trim().split("|").slice(1, -1).map(c => c.trim());
-          if (idx === 1 && /^-+$/.test(cols[0])) return ""; // md separator row
+          if (idx === 1 && /^-+$/.test(cols[0])) return "";
           const tag = (idx === 0) ? "th" : "td";
           return "<tr>" + cols.map(c => `<${tag}>${c}</${tag}>`).join("") + "</tr>";
         }).join("") +
@@ -105,7 +98,6 @@ function markdownTablesToHtml(md){
     return "<p>" + block + "</p>";
   }).join("");
 }
-
 function renderSources(){
   const wrap = document.getElementById('sourcesWrap');
   const panel = document.getElementById('sourcesPanel');
@@ -123,143 +115,97 @@ function renderSources(){
     wrap.appendChild(span);
   });
 }
-
-// ===== Fuzzy search =====
-function levenshtein(a,b){if(!a||!b) return a||b ? Math.max(a.length,b.length) : 0;const m=a.length,n=b.length,dp=Array(m+1).fill(0).map(()=>Array(n+1).fill(0));for(let i=0;i<=m;i++) dp[i][0]=i;for(let j=0;j<=n;j++) dp[0][j]=j;for(let i=1;i<=m;i++) for(let j=1;j<=n;j++){const c=a[i-1]===b[j-1]?0:1;dp[i][j]=Math.min(dp[i-1][j]+1, dp[i][j-1]+1, dp[i-1][j-1]+c);}return dp[m][n];}
-function normalizedSimilarity(a,b){a=(a||"").toLowerCase();b=(b||"").toLowerCase();const d=levenshtein(a,b), M=Math.max(a.length,b.length);return M ? 1 - d/M : 1;}
-function scoreMatch(q,t){return normalizedSimilarity(q,t);} 
-
-function searchKB(query){
-  const pool = [...kb, ...docKb];
-  if (isAdmin) pool.push(...hiddenKb);
-  const scored = pool.map(k => {
-    let score = scoreMatch(query, k.text);
-    if (k.source === 'PDF') score += 0.15; // Boost PDF slightly
-    return { item: k, score };
-  })
-  .sort((a,b)=>b.score-a.score)
-  .filter(x=>x.score>0.2)
-  .slice(0,8);
-  return scored;
+// Loading indicator
+function showLoading(text="Searching…"){
+  hideLoading();
+  const el = document.createElement("div");
+  el.className = "msg bot";
+  el.setAttribute("data-loading", "true");
+  el.innerHTML = `Bot:<br><div class="loadingRow"><div class="spinner"></div><span>${text}</span></div>`;
+  const box = document.getElementById("chatbox");
+  box.appendChild(el);
+  box.scrollTop = box.scrollHeight;
+  loadingEl = el;
+}
+function hideLoading(){
+  const box = document.getElementById("chatbox");
+  if (loadingEl && box.contains(loadingEl)) box.removeChild(loadingEl);
+  loadingEl = null;
 }
 
-function composeReply(query){
-  const hits = searchKB(query);
-  if(hits.length===0) return `No relevant info found.\nTry Dayforce Help: https://help.dayforce.com/`;
+// Auto-expand textarea
+const userInput = document.getElementById("userInput");
+userInput.addEventListener("input", function(){
+  this.style.height = "auto";
+  this.style.height = this.scrollHeight + "px";
+});
 
-  let reply = "Keyword Search:\n\n| Keyword |\n|---------|\n| "+query+" |\n\n";
-  reply += "Answers Found:\n\n| # | Snippet | Source |\n|---|----------|--------|\n";
-  const regex = new RegExp(`(${query})`, "ig");
-  hits.forEach((h, i) => {
-    let snippet = h.item.text.replace(/\n/g, " ");
-    if (snippet.length > 180) snippet = snippet.slice(0, 180) + "...";
-    snippet = snippet.replace(regex, "<mark>$1</mark>");
-    let src = "Excel";
-    if (h.item.source === 'PDF') {
-      const web = pdfWebUrls[h.item.pdfIndex] || "";
-      const label = (pdfNames[h.item.pdfIndex] || 'PDF');
-      src = web ? `<a href="${web}#page=${h.item.page}" target="_blank">${label} p.${h.item.page}</a>` : `${label} p.${h.item.page}`;
+// ===== Search =====
+function levenshtein(a,b){if(!a||!b) return a||b?Math.max(a.length,b.length):0;const m=a.length,n=b.length,dp=Array(m+1).fill(0).map(()=>Array(n+1).fill(0));for(let i=0;i<=m;i++)dp[i][0]=i;for(let j=0;j<=n;j++)dp[0][j]=j;for(let i=1;i<=m;i++)for(let j=1;j<=n;j++){const c=a[i-1]===b[j-1]?0:1;dp[i][j]=Math.min(dp[i-1][j]+1,dp[i][j-1]+1,dp[i-1][j-1]+c);}return dp[m][n];}
+function normalizedSimilarity(a,b){a=(a||"").toLowerCase();b=(b||"").toLowerCase();const d=levenshtein(a,b),M=Math.max(a.length,b.length);return M?1-d/M:1;}
+function scoreMatch(q,t){return normalizedSimilarity(q,t);} 
+function searchKB(query){
+  const words = query.toLowerCase().split(/\s+/).filter(w=>w.length>2);
+  const pool = [...kb, ...docKb];
+  if (isAdmin) pool.push(...hiddenKb);
+  const scored = pool.filter(k=>words.some(w=>k.text.toLowerCase().includes(w)))
+    .map(k=>{
+      let score = scoreMatch(query,k.text);
+      if (k.source === 'PDF') score += 0.15; // keep slight PDF preference
+      return { item:k, score };
+    })
+    .sort((a,b)=>b.score-a.score)
+    .slice(0,8);
+  return scored;
+}
+function composeReply(query){
+  const hits=searchKB(query);
+  if(hits.length===0)return `No relevant info found.\nTry Dayforce Help: https://help.dayforce.com/`;
+  let reply="Keyword Search:\n\n| Keyword |\n|---------|\n| "+query+" |\n\n";
+  reply+="Answers Found:\n\n| # | Snippet | Source |\n|---|----------|--------|\n";
+  const regex=new RegExp(`(${query})`,"ig");
+  hits.forEach((h,i)=>{
+    let snippet=h.item.text.replace(/\n/g," ");
+    if(snippet.length>180)snippet=snippet.slice(0,180)+"...";
+    snippet=snippet.replace(regex,"<mark>$1</mark>");
+    let src="Excel";
+    if(h.item.source==='PDF'){
+      const web=pdfWebUrls[h.item.pdfIndex]||"";
+      const label=(pdfNames[h.item.pdfIndex]||'PDF');
+      src=web?`<a href="${web}#page=${h.item.page}" target="_blank">${label} p.${h.item.page}</a>`:`${label} p.${h.item.page}`;
     }
-    reply += `| ${i+1} | ${snippet} | ${src} |\n`;
+    reply+=`| ${i+1} | ${snippet} | ${src} |\n`;
   });
   return reply;
 }
 
 // ===== Graph helpers =====
-async function gFetch(url, options={}){
-  const res = await fetch(url, options);
-  if (!res.ok){ let text=""; try{text=await res.text();}catch(e){}; throw new Error(`HTTP ${res.status} ${res.statusText}\nURL: ${url}\n${text}`); }
-  const ct = res.headers.get("content-type") || "";
-  if (ct.includes("application/json")) return res.json();
-  if (ct.includes("application/pdf") || ct.includes("application/octet-stream")) return res.arrayBuffer();
+async function gFetch(url,opt={}){
+  const res=await fetch(url,opt);
+  if(!res.ok){
+    let t=""; try{t=await res.text();}catch{};
+    throw new Error(`HTTP ${res.status} ${res.statusText}\n${t}`);
+  }
+  const ct=res.headers.get("content-type")||"";
+  if(ct.includes("json"))return res.json();
+  if(ct.includes("pdf")||ct.includes("octet"))return res.arrayBuffer();
   return res.text();
 }
-function toGraphShareId(url){ let b=btoa(url).replace(/=+$/,'').replace(/\+/g,'-').replace(/\//g,'_'); return 'u!'+b; }
+function toGraphShareId(url){let b=btoa(url).replace(/=+$/,'').replace(/\+/g,'-').replace(/\//g,'_');return 'u!'+b;}
 
 // ===== OAuth =====
-function loginMicrosoftGraph(){
-  const tenant = "common";
-  const params = new URLSearchParams({ client_id:clientId, response_type:"token", redirect_uri:redirectUri, scope:scopes, prompt:"select_account" });
-  window.location.href = `https://login.microsoftonline.com/${tenant}/oauth2/v2.0/authorize?${params}`;
-}
-function getTokenFromHash(){
-  if (window.location.hash){
-    const p = new URLSearchParams(window.location.hash.substring(1));
-    const t = p.get("access_token");
-    if (t){ accessToken=t; window.location.hash=""; fetchExcelKBAndPdfs(); }
-  }
-}
+function loginMicrosoftGraph(){const tenant="common";const params=new URLSearchParams({client_id:clientId,response_type:"token",redirect_uri:redirectUri,scope:scopes,prompt:"select_account"});window.location.href=`https://login.microsoftonline.com/${tenant}/oauth2/v2.0/authorize?${params}`;}
+function getTokenFromHash(){if(window.location.hash){const p=new URLSearchParams(window.location.hash.substring(1));const t=p.get("access_token");if(t){accessToken=t;window.location.hash="";fetchExcelKBAndPdfs();}}}
 
 // ===== Excel KB + Config (multi‑PDF) =====
-async function resolveWorkbookBase(){
-  if (workbookBase) return;
-  const shareId = toGraphShareId(shareLink);
-  const item = await gFetch(`https://graph.microsoft.com/v1.0/shares/${shareId}/driveItem`, { headers:{ Authorization:"Bearer "+accessToken } });
-  workbookBase = `https://graph.microsoft.com/v1.0/drives/${item.parentReference.driveId}/items/${item.id}/workbook`;
-}
+async function resolveWorkbookBase(){if(workbookBase)return;const shareId=toGraphShareId(shareLink);const item=await gFetch(`https://graph.microsoft.com/v1.0/shares/${shareId}/driveItem`,{headers:{Authorization:"Bearer "+accessToken}});workbookBase=`https://graph.microsoft.com/v1.0/drives/${item.parentReference.driveId}/items/${item.id}/workbook`;}
+async function readKnowledgeRows(){try{const data=await gFetch(`${workbookBase}/worksheets('Knowledge')/range(address='A2:A20000')`,{headers:{Authorization:'Bearer '+accessToken}});const vals=Array.isArray(data.values)?data.values:[];return vals.map(r=>(r&&r[0]?String(r[0]).trim():"")).filter(Boolean);}catch(err){addChat("Bot","Error reading Knowledge: "+err.message);return[];}}
+async function readPdfLinksFromConfig(){let entries=[];try{const data=await gFetch(`${workbookBase}/worksheets('Config')/range(address='A2:B200')`,{headers:{Authorization:'Bearer '+accessToken}});const vals=Array.isArray(data.values)?data.values:[];entries=vals.map(r=>({name:String(r[0]||"").trim(),link:String(r[1]||"").trim()})).filter(e=>/^https?:\/\//i.test(e.link));if(entries.length)return entries;}catch(e){}try{const data=await gFetch(`${workbookBase}/worksheets('Config')/range(address='A2:A200')`,{headers:{Authorization:'Bearer '+accessToken}});const vals=Array.isArray(data.values)?data.values:[];entries=vals.map(r=>({name:'',link:(r&&r[0]?String(r[0]).trim():"")})).filter(e=>/^https?:\/\//i.test(e.link));}catch(err){addChat("Bot","Config sheet missing or PDF links not found.");}return entries;}
 
-async function readKnowledgeRows(){
-  try {
-    const tData = await gFetch(`${workbookBase}/tables`, { headers:{ Authorization:'Bearer '+accessToken } });
-    const t = (tData.value||[]).find(x => (x.name||'').toLowerCase()==='knowledgetable');
-    if (t){
-      const rowsData = await gFetch(`${workbookBase}/tables('${t.name}')/rows`, { headers:{ Authorization:'Bearer '+accessToken } });
-      return (rowsData.value||[]).map(r => (r.values && r.values[0] && r.values[0][0]) ? String(r.values[0][0]).trim() : "").filter(Boolean);
-    }
-    const data = await gFetch(`${workbookBase}/worksheets('Knowledge')/range(address='A2:A20000')`, { headers:{ Authorization:'Bearer '+accessToken } });
-    const vals = Array.isArray(data.values) ? data.values : [];
-    return vals.map(r => (r && r[0] ? String(r[0]).trim() : "")).filter(Boolean);
-  } catch (err){ addChat("Bot", "Error reading Knowledge: "+err.message); return []; }
-}
-
-async function readPdfLinksFromConfig(){
-  // Supports either:
-  //  a) Table named ConfigTable with columns: Name | PDFLink
-  //  b) Raw range in Config sheet: A2:A (links only) OR A2:B (Name | Link)
-  let entries = [];
-  // Try table first
-  try {
-    const tData = await gFetch(`${workbookBase}/tables`, { headers:{ Authorization:'Bearer '+accessToken } });
-    const t = (tData.value||[]).find(x => (x.name||'').toLowerCase()==='configtable');
-    if (t){
-      const headerRes = await gFetch(`${workbookBase}/tables('${t.name}')/headerRowRange`, { headers:{ Authorization:'Bearer '+accessToken } });
-      const headers = (headerRes.values && headerRes.values[0]) ? headerRes.values[0].map(v=>String(v).trim().toLowerCase()) : [];
-      const nameIdx = headers.indexOf('name');
-      const linkIdx = headers.indexOf('pdflink');
-      const rowsData = await gFetch(`${workbookBase}/tables('${t.name}')/rows`, { headers:{ Authorization:'Bearer '+accessToken } });
-      entries = (rowsData.value||[]).map(r => {
-        const row = (r.values && r.values[0]) ? r.values[0] : [];
-        const name = nameIdx>=0 ? String(row[nameIdx]||'').trim() : '';
-        const link = linkIdx>=0 ? String(row[linkIdx]||'').trim() : '';
-        return { name, link };
-      }).filter(e => /^https?:\/\//i.test(e.link));
-      if (entries.length) return entries;
-    }
-  } catch (e) { /* fall back to ranges */ }
-
-  // Fallback: ranges
-  try {
-    // Try two-column Name|Link first
-    const data = await gFetch(`${workbookBase}/worksheets('Config')/range(address='A2:B200')`, { headers:{ Authorization:'Bearer '+accessToken } });
-    const vals = Array.isArray(data.values) ? data.values : [];
-    entries = vals.map(r => ({ name: String(r[0]||'').trim(), link: String(r[1]||'').trim() }))
-                  .filter(e => /^https?:\/\//i.test(e.link));
-    if (entries.length) return entries;
-  } catch (e) { /* continue */ }
-  try {
-    // Last resort: single column links only
-    const data = await gFetch(`${workbookBase}/worksheets('Config')/range(address='A2:A200')`, { headers:{ Authorization:'Bearer '+accessToken } });
-    const vals = Array.isArray(data.values) ? data.values : [];
-    entries = vals.map(r => ({ name: '', link: (r && r[0] ? String(r[0]).trim() : '') }))
-                  .filter(e => /^https?:\/\//i.test(e.link));
-  } catch (err){ addChat("Bot", "Config sheet missing or PDF links not found."); }
-  return entries;
-}
-
+// ===== Admin secret + helpers =====
 async function readAdminSecret(){
   try{
     await resolveWorkbookBase();
-    // Preferred: Admin!A1:C2 with headers PasswordHash | Salt | Kdf
     const r = await gFetch(`${workbookBase}/worksheets('Admin')/range(address='A1:C2')`, { headers: { Authorization:'Bearer '+accessToken } });
     const grid = r.values || [];
     const a1 = (grid[0] && grid[0][0]) ? String(grid[0][0]) : "";
@@ -272,7 +218,6 @@ async function readAdminSecret(){
       adminSecret = { mode:"hashed", hashB64:a2, saltB64:b2, kdf:c2 };
       return adminSecret;
     }
-    // Fallbacks: plain in A2, or A1 if not header
     const a2PlainRes = await gFetch(`${workbookBase}/worksheets('Admin')/range(address='A2')`, { headers: { Authorization:'Bearer '+accessToken } });
     const v2 = a2PlainRes.values && a2PlainRes.values[0] && a2PlainRes.values[0][0] ? String(a2PlainRes.values[0][0]) : '';
     if (v2) { adminSecret = { mode:"plain", plain:v2 }; return adminSecret; }
@@ -282,7 +227,6 @@ async function readAdminSecret(){
     return adminSecret;
   }catch(err){ addChat("Bot","Could not read Admin sheet for password. Using default."); adminSecret = { mode:"plain", plain:"admin123" }; return adminSecret; }
 }
-
 function b64enc(arrBuf){ const bytes=new Uint8Array(arrBuf); let bin=""; for(let i=0;i<bytes.length;i++) bin+=String.fromCharCode(bytes[i]); return btoa(bin); }
 function b64dec(b64){ const bin=atob(b64); const bytes=new Uint8Array(bin.length); for(let i=0;i<bin.length;i++) bytes[i]=bin.charCodeAt(i); return bytes.buffer; }
 function randomSalt(len=16){ const buf=new Uint8Array(len); crypto.getRandomValues(buf); return b64enc(buf.buffer); }
@@ -302,7 +246,6 @@ async function verifyAdminPassword(input){
   const derivedB64 = await pbkdf2(input, saltB64, iterations, 32);
   return derivedB64 === hashB64;
 }
-
 async function ensureKnowledgeTable(){
   await resolveWorkbookBase();
   const tData = await gFetch(`${workbookBase}/tables`, { headers:{ Authorization:'Bearer '+accessToken } });
@@ -341,132 +284,113 @@ async function updateAdminPassword(newPwd){
   }catch(err){ addChat("Bot","Failed to write hashed password: "+err.message); }
 }
 
-async function fetchSinglePdfFromOneDrive(pdfShareLink, pdfIndex){
-  const shareId = toGraphShareId(pdfShareLink);
-  const item = await gFetch(`https://graph.microsoft.com/v1.0/shares/${shareId}/driveItem`, { headers:{ Authorization:"Bearer "+accessToken } });
-  const webUrl = item.webUrl; pdfWebUrls[pdfIndex] = webUrl;
-  const driveId = item.parentReference.driveId; const itemId = item.id;
-
-  const buf = await gFetch(`https://graph.microsoft.com/v1.0/drives/${driveId}/items/${itemId}/content`, { headers:{ Authorization:'Bearer '+accessToken } });
-  const pdf = await pdfjsLib.getDocument({ data: buf }).promise;
-
-  let extracted = 0;
-  for (let p = 1; p <= pdf.numPages; p++){
-    const page = await pdf.getPage(p);
-    const tc = await page.getTextContent();
-    const txt = tc.items.map(it => it.str).join(" ").replace(/\s+/g, " ").trim();
-    const chunkSize = 500, overlap = 80;
-    for (let i = 0; i < txt.length; i += (chunkSize - overlap)){
-      const chunk = txt.slice(i, i + chunkSize).trim();
-      if (chunk.length > 60){
-        docKb.push({ text: chunk, source: 'PDF', page: p, pdfIndex });
+// ===== PDF fetch & indexing =====
+async function fetchSinglePdfFromOneDrive(link, idx){
+  const shareId=toGraphShareId(link);
+  const item=await gFetch(`https://graph.microsoft.com/v1.0/shares/${shareId}/driveItem`,{headers:{Authorization:"Bearer "+accessToken}});
+  pdfWebUrls[idx]=item.webUrl;
+  const buf=await gFetch(`https://graph.microsoft.com/v1.0/drives/${item.parentReference.driveId}/items/${item.id}/content`,{headers:{Authorization:'Bearer '+accessToken}});
+  const pdf=await pdfjsLib.getDocument({data:buf}).promise;
+  let extracted=0;
+  for(let p=1;p<=pdf.numPages;p++){
+    const page=await pdf.getPage(p);
+    const tc=await page.getTextContent();
+    const txt=tc.items.map(it=>it.str).join(" ").replace(/\s+/g," ").trim();
+    const chunkSize=500, overlap=80;
+    for(let i=0;i<txt.length;i+=(chunkSize-overlap)){
+      const chunk=txt.slice(i,i+chunkSize).trim();
+      if(chunk.length>60){
+        docKb.push({text:chunk,source:'PDF',page:p,pdfIndex:idx});
         extracted++;
       }
     }
   }
-  addChat("Bot", `Parsed PDF ${pdfIndex+1}: ${extracted} chunks.`);
+  addChat("Bot",`Parsed PDF ${idx+1}: ${extracted} chunks.`);
 }
 
 async function fetchExcelKBAndPdfs(){
-  try {
+  showLoading("Searching… loading KB and scanning PDFs");
+  try{
     await resolveWorkbookBase();
     const knowledgeTexts = await readKnowledgeRows();
     kb = knowledgeTexts.map(text => ({ text }));
-    addChat("Bot", "Excel KB loaded.");
+    addChat("Bot","Excel KB loaded.");
 
     const pdfEntries = await readPdfLinksFromConfig();
-    if (!pdfEntries.length){ addChat("Bot", "No PDF links found in Config. Add either a ConfigTable (Name | PDFLink) or values in Config!A2:B…"); renderSources(); return; }
-
-    // Reset PDF state
-    pdfWebUrls = []; pdfNames = []; docKb = [];
-
-    for (let idx = 0; idx < pdfEntries.length; idx++){
-      const { name, link } = pdfEntries[idx];
+    pdfWebUrls=[]; pdfNames=[]; docKb=[];
+    for(let idx=0; idx<pdfEntries.length; idx++){
+      const {name,link}=pdfEntries[idx];
       pdfNames[idx] = name || 'PDF';
-      try { await fetchSinglePdfFromOneDrive(link, idx); }
-      catch (e){ addChat("Bot", `Error loading PDF ${idx+1} (${pdfNames[idx]}): ${e.message}`); }
+      try{ await fetchSinglePdfFromOneDrive(link, idx); }
+      catch(e){ addChat("Bot",`Error loading PDF ${idx+1}: ${e.message}`); }
     }
-
-    const total = docKb.length;
-    const tag = document.getElementById("pdfCount");
-    tag.textContent = `PDF: ${total}`; tag.classList.remove("hidden");
+    const total=docKb.length;
+    const tag=document.getElementById("pdfCount");
+    tag.textContent=`PDF: ${total}`; tag.classList.remove("hidden");
     renderSources();
-    addChat("Bot", `Indexed ${total} chunks from ${pdfEntries.length} PDF(s).`);
-  } catch (err){ addChat("Bot", "Error loading KB/PDFs: "+err.message); }
+    addChat("Bot",`Indexed ${total} chunks from ${pdfEntries.length} PDF(s).`);
+  }catch(err){
+    addChat("Bot","Error loading KB/PDFs: "+err.message);
+  }finally{
+    hideLoading();
+  }
 }
 
-// ===== Auto-expand textarea =====
-const userInput = document.getElementById("userInput");
-userInput.addEventListener("input", function () {
-  this.style.height = "auto";
-  this.style.height = this.scrollHeight + "px";
-});
-  
 // ===== Input handlers =====
 async function handleInput(){
-  const val = document.getElementById("userInput").value.trim();
-  if (!val) return;
-  document.getElementById("userInput").value = "";
-  addChat("User", val);
+  const val=document.getElementById("userInput").value.trim();
+  if(!val) return;
+  document.getElementById("userInput").value="";
+  document.getElementById("userInput").style.height="auto";
+  addChat("User",val);
 
   // Admin commands
-  if (isAdmin && val.startsWith('/learn ')){
-    const text = val.slice(7).trim();
-    if (!text) return addChat("Bot","Nothing to learn.");
-    hiddenKb.push({ text });
+  if(isAdmin&&val.startsWith('/learn ')){
+    const text=val.slice(7).trim();
+    if(!text) return addChat("Bot","Nothing to learn.");
+    hiddenKb.push({text});
     addChat("Bot","Adding knowledge to Excel…");
     await appendKnowledgeToExcel(text);
     await fetchExcelKBAndPdfs();
     return;
   }
-  if (isAdmin && val.startsWith('/passwd ')){
-    const newPwd = val.slice(8).trim();
-    if (!newPwd) return addChat("Bot","Password cannot be empty.");
+  if(isAdmin&&val.startsWith('/passwd ')){
+    const newPwd=val.slice(8).trim();
+    if(!newPwd) return addChat("Bot","Password cannot be empty.");
     await updateAdminPassword(newPwd);
     return;
   }
 
-  addChat("Bot", composeReply(val));
+  addChat("Bot",composeReply(val));
 }
-
 document.getElementById("sendBtn").addEventListener("click", handleInput);
-(document.getElementById("userInput")).addEventListener("keydown", e=>{ if(e.key==="Enter") handleInput(); });
-document.getElementById("reloadBtn").addEventListener("click", ()=>{ if(accessToken) fetchExcelKBAndPdfs(); else addChat("Bot","Please sign in first (Admin Login)."); });
+document.getElementById("userInput").addEventListener("keydown", e=>{ if(e.key==="Enter" && !e.shiftKey) { e.preventDefault(); handleInput(); } });
 
+document.getElementById("reloadBtn").addEventListener("click", ()=>{ if(accessToken) fetchExcelKBAndPdfs(); else addChat("Bot","Please sign in first (Admin Login)."); });
 document.getElementById("switchBtn").addEventListener("click", ()=>{
-  // Clear runtime state
-  accessToken = null; workbookBase = null; kb=[]; hiddenKb=[]; docKb=[]; pdfWebUrls=[]; pdfNames=[]; isAdmin=false;
-  document.getElementById('modeLabel').textContent = 'User';
+  accessToken=null; workbookBase=null; kb=[]; hiddenKb=[]; docKb=[]; pdfWebUrls=[]; pdfNames=[]; isAdmin=false;
+  document.getElementById('modeLabel').textContent='User';
   document.getElementById('pdfCount').classList.add('hidden');
   renderSources();
   addChat("Bot","Switching account… redirecting to Microsoft sign-in.");
   loginMicrosoftGraph();
 });
-
 document.getElementById("adminToggleBtn").addEventListener("click", async ()=>{
-  if (isAdmin){
-    isAdmin = false; document.getElementById('modeLabel').textContent = 'User'; addChat("Bot","Switched to User mode."); return;
-  }
-  // Need token first
+  if (isAdmin){ isAdmin=false; document.getElementById('modeLabel').textContent='User'; addChat("Bot","Switched to User mode."); return; }
   if (!accessToken){ addChat("Bot","Opening Microsoft sign-in…"); return loginMicrosoftGraph(); }
-  // Ensure workbook and admin secret
   await resolveWorkbookBase();
   await readAdminSecret();
   const pwd = prompt("Enter Admin Password:");
-  if (pwd == null) return; // cancelled
+  if (pwd == null) return;
   const ok = await verifyAdminPassword(pwd);
   if (!ok) return alert("Wrong password.");
-  isAdmin = true; document.getElementById('modeLabel').textContent = 'Admin';
+  isAdmin = true; document.getElementById('modeLabel').textContent='Admin';
   addChat("Bot","Admin mode unlocked! Commands: /learn <text>, /passwd <new>");
 });
 
 // ===== Bootstrap =====
-function init(){
-  getTokenFromHash();
-  if (!accessToken){ addChat("Bot","Click Admin Login to sign in."); }
-}
+function init(){ getTokenFromHash(); if (!accessToken){ addChat("Bot","Click Admin Login to sign in."); } }
 init();
 </script>
 </body>
 </html>
-
