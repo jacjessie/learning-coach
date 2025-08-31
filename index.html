@@ -16,7 +16,11 @@
   .controls{display:flex;gap:8px;margin-top:8px;flex-wrap:wrap}
   .btn{background:#7c3aed;border:none;padding:6px 12px;border-radius:6px;color:white;cursor:pointer;}
   .small{opacity:.8;font-size:12px;margin-left:8px}
-  input#userInput{min-width:260px}
+  #userInput {
+  min-width: 260px;
+  font-family: inherit;
+  line-height: 1.4;
+}
   .hidden{display:none}
   .tag{display:inline-block;background:#1a2448;border:1px solid #24305e;border-radius:14px;padding:2px 8px;margin-left:6px;font-size:12px;opacity:.9}
   .chatTable{border-collapse:collapse;margin:6px 0;width:100%;font-size:13px;}
@@ -40,7 +44,7 @@
   <div id="chatbox"></div>
 
   <div class="controls">
-    <input id="userInput" placeholder="Ask a question or use /learn, /passwd (admin)" style="flex:1;">
+    <textarea id="userInput" placeholder="Ask a question or use /learn, /passwd (admin)" rows="1" style="flex:1; resize:none; overflow:hidden;"></textarea>
     <button id="sendBtn" class="btn">Send</button>
     <button id="adminToggleBtn" class="btn" title="Sign in & verify admin password">Admin Login</button>
     <button id="reloadBtn" class="btn" title="Reload KB + PDFs">Reload</button>
@@ -391,6 +395,13 @@ async function fetchExcelKBAndPdfs(){
   } catch (err){ addChat("Bot", "Error loading KB/PDFs: "+err.message); }
 }
 
+// ===== Auto-expand textarea =====
+const userInput = document.getElementById("userInput");
+userInput.addEventListener("input", function () {
+  this.style.height = "auto";
+  this.style.height = this.scrollHeight + "px";
+});
+  
 // ===== Input handlers =====
 async function handleInput(){
   const val = document.getElementById("userInput").value.trim();
@@ -458,3 +469,4 @@ init();
 </script>
 </body>
 </html>
+
