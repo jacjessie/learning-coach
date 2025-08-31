@@ -12,21 +12,21 @@
   body {font-family: Arial, system-ui; background:var(--bg); color:var(--text); margin:20px;}
   .card{background:var(--card);padding:14px;border-radius:14px;margin-bottom:20px;}
   h1{margin:0;font-size:22px}
-  .row{display:flex;gap:10px;flex-wrap:wrap;align-items:flex-start}
+  .row{display:flex;gap:10px;flex-wrap:wrap;align-items:center}
   .btn{background:var(--accent);border:none;padding:8px 12px;border-radius:10px;color:white;cursor:pointer;text-decoration:none;display:inline-flex;align-items:center;gap:8px}
-  #chat{height:420px;overflow:auto;border:1px solid rgba(255,255,255,.08);padding:10px;border-radius:10px;background:rgba(255,255,255,.02)}
-  .msg{margin:6px 0;padding:8px;border-radius:8px;max-width:80%;white-space:pre-wrap}
+  #chat{height:460px;overflow:auto;border:1px solid rgba(255,255,255,.08);padding:10px;border-radius:10px;background:rgba(255,255,255,.02);display:flex;flex-direction:column}
+  .msg{margin:6px 0;padding:8px;border-radius:8px;max-width:100%;white-space:normal}
   .user{background:rgba(99,102,241,0.15);align-self:flex-end}
-  .bot{background:rgba(255,255,255,0.03);align-self:flex-start}
+  .bot{background:rgba(255,255,255,0.03);align-self:flex-start;width:100%}
   .controls{display:flex;gap:8px;margin-top:8px;flex-wrap:wrap;align-items:flex-start}
   .notice{background:#13213d;border:1px solid #23386b;color:#cfe0ff;padding:6px 10px;border-radius:8px;margin-bottom:6px;font-size:12px;display:flex;align-items:center;gap:8px;}
   .notice::before{content:'⚠️';}
-  textarea{width:100%;min-width:280px;font-family:inherit;line-height:1.4;resize:none;overflow:hidden}
+  textarea{width:100%;min-width:280px;font-family:inherit;line-height:1.4;resize:none;overflow:hidden;background:#0b152d;border:1px solid #2a3a6c;color:#cfe0ff;border-radius:8px;padding:8px}
   .chatTable{border-collapse:collapse;margin:6px 0;width:100%;font-size:13px;}
-  .chatTable th,.chatTable td{border:1px solid rgba(255,255,255,0.2);padding:4px 6px;}
-  .chatTable th{background:rgba(255,255,255,0.1);font-weight:bold;}
+  .chatTable th,.chatTable td{border:1px solid rgba(255,255,255,0.2);padding:6px 8px;vertical-align:top}
+  .chatTable th{background:rgba(255,255,255,0.08);font-weight:bold;}
   mark{background:#facc15;color:#000;padding:0 2px;border-radius:2px;}
-  .sources{display:flex;gap:6px;flex-wrap:wrap;margin-top:6px}
+  .sources{display:flex;gap:6px;flex-wrap:wrap;margin-left:10px}
   .sourceTag{display:inline-flex;gap:6px;align-items:center;background:#0f1a3d;border:1px solid #22336b;border-radius:14px;padding:4px 8px}
   .sourceTag a{color:#cbd5ff;text-decoration:none}
   .badge{display:inline-block;padding:2px 6px;border-radius:10px;font-size:11px;margin-left:6px}
@@ -47,7 +47,7 @@
     TALENT MODULE COACH — User
     <span id="lastPub" class="muted" style="font-size:12px"></span>
   </h1>
-  <div class="row" style="align-items:center;margin-top:6px">
+  <div class="row" style="margin-top:6px">
     <div>Mode: <strong>User</strong></div>
     <div class="sources" id="sources"></div>
   </div>
@@ -90,53 +90,108 @@ let kb=[], docKb=[], pdfNames=[], pdfWebUrls=[], pdfPublicFlags=[];
 let lastHits=[], lastQuery="", lastModule="", lastKeywords="";
 let lastPublishedTS = null;
 
+// UI helpers
 const chat=document.getElementById('chat');
-function addChat(sender, html){ const d=document.createElement('div'); d.className='msg '+(sender==='User'?'user':'bot'); d.innerHTML=(sender==='User'?'You: ':'Bot:<br>')+markdownToTable(html); chat.appendChild(d); chat.scrollTop=chat.scrollHeight; }
-function markdownToTable(md){
-  const blocks=(md||'').split(/\\n\\s*\\n/);
-  return blocks.map(b=>{
-    if(/^\\s*\\|.*\\|\\s*$/m.test(b)){
-      const rows=b.trim().split('\\n');
-      return "<table class='chatTable'>"+rows.map((r,i)=>{const cols=r.trim().split('|').slice(1,-1).map(c=>c.trim()); const tag=(i===0)?'th':'td'; if(i===1 && /^-+$/.test(cols[0])) return ''; return '<tr>'+cols.map(c=>`<${tag}>${c}</${tag}>`).join('')+'</tr>';}).join('')+"</table>";
-    }
-    return '<p>'+b+'</p>';
-  }).join('');
+function addChat(sender, html){
+  const d=document.createElement('div');
+  d.className='msg '+(sender==='User'?'user':'bot');
+  d.innerHTML=(sender==='User'?'You: ':'Bot:<br>')+html;
+  chat.appendChild(d);
+  chat.scrollTop=chat.scrollHeight;
 }
 function setStatus(text, ratio){ const row=document.getElementById('statusRow'); const t=document.getElementById('statusText'); const f=document.getElementById('statusFill'); row.style.display='flex'; t.textContent=text; if(typeof ratio==='number'){ f.style.width=(Math.max(0,Math.min(1,ratio))*100)+'%'; } }
 function clearStatus(){ document.getElementById('statusRow').style.display='none'; document.getElementById('statusFill').style.width='0%'; }
-function renderSources(){ const wrap=document.getElementById('sources'); wrap.innerHTML=''; pdfWebUrls.forEach((u,i)=>{ const s=document.createElement('span'); s.className='sourceTag'; const badge = (pdfPublicFlags[i]) ? `<span class="badge public">Public</span>` : ''; s.innerHTML=`<span>📄</span><a href="${u}#page=1" target="_blank">${pdfNames[i]||'PDF'}</a>${badge}<span class="small" style="opacity:.7">(${docKb.filter(x=>x.pdfIndex===i).length})</span>`; wrap.appendChild(s); }); }
-const userInput=document.getElementById('userInput'); userInput.addEventListener('input', function(){ this.style.height='auto'; this.style.height=this.scrollHeight+'px'; });
+function renderSources(){
+  const wrap=document.getElementById('sources'); wrap.innerHTML='';
+  pdfWebUrls.forEach((u,i)=>{
+    const s=document.createElement('span'); s.className='sourceTag';
+    const badge = (pdfPublicFlags[i]) ? `<span class="badge public">Public</span>` : '';
+    s.innerHTML=`<span>📄</span><a href="${u}#page=1" target="_blank">${pdfNames[i]||'PDF'}</a>${badge}<span class="small" style="opacity:.7">(${docKb.filter(x=>x.pdfIndex===i).length})</span>`;
+    wrap.appendChild(s);
+  });
+}
 
-function levenshtein(a,b){if(!a||!b) return a||b?Math.max(a.length,b.length):0;const m=a.length,n=b.length,dp=Array(m+1).fill(0).map(()=>Array(n+1).fill(0));for(let i=1;i<=m;i++)dp[i][0]=i;for(let j=1;j<=n;j++)dp[0][j]=j;for(let i=1;i<=m;i++)for(let j=1;j<=n;j++){const c=a[i-1]===b[j-1]?0:1;dp[i][j]=Math.min(dp[i-1][j]+1,dp[i][j-1]+1,dp[i-1][j-1]+c);}return dp[m][n];}
+// Textarea auto-grow
+const userInput=document.getElementById('userInput');
+userInput.addEventListener('input', function(){ this.style.height='auto'; this.style.height=this.scrollHeight+'px'; });
+
+// Fuzzy helpers
+function levenshtein(a,b){if(!a||!b) return a||b?Math.max(a.length,b.length):0;const m=a.length,n=b.length,dp=Array(m+1).fill(0).map(()=>Array(n+1).fill(0));for(let i=0;i<=m;i++)dp[i][0]=i;for(let j=0;j<=n;j++)dp[0][j]=j;for(let i=1;i<=m;i++)for(let j=1;j<=n;j++){const c=a[i-1]===b[j-1]?0:1;dp[i][j]=Math.min(dp[i-1][j]+1,dp[i][j-1]+1,dp[i-1][j-1]+c);}return dp[m][n];}
 function normalizedSimilarity(a,b){a=(a||'').toLowerCase();b=(b||'').toLowerCase();const d=levenshtein(a,b),M=Math.max(a.length,b.length);return M?1-d/M:1;}
 function scoreMatch(q,t){return normalizedSimilarity(q,t);} 
-function parseQueryParts(q){ const m=q.split(/\\s*[-–—:|]\\s*/); if(m.length>=2){ const module=m[m.length-1].trim(); const keywords=m.slice(0,m.length-1).join(' ').trim(); return {keywords,module}; } return {keywords:q.trim(),module:''}; }
-function pickModuleIndex(module){ if(!module) return null; let best=-1,score=0; const ml=module.toLowerCase(); for(let i=0;i<pdfNames.length;i++){ const s=normalizedSimilarity(ml,(pdfNames[i]||'').toLowerCase()); if(s>score){score=s;best=i;} } return (score>=0.42)?best:null; }
 
+// Query parsing & module targeting
+function parseQueryParts(q){
+  const m=q.split(/\\s*[-–—:|]\\s*/);
+  if(m.length>=2){ const module=m[m.length-1].trim(); const keywords=m.slice(0,m.length-1).join(' ').trim(); return {keywords,module}; }
+  return {keywords:q.trim(),module:''};
+}
+function pickModuleIndex(module){
+  if(!module) return null; let best=-1,score=0; const ml=module.toLowerCase();
+  for(let i=0;i<pdfNames.length;i++){ const s=normalizedSimilarity(ml,(pdfNames[i]||'').toLowerCase()); if(s>score){score=s;best=i;} }
+  return (score>=0.42)?best:null;
+}
+
+// Search
 function searchAll(query){
   const {keywords,module}=parseQueryParts(query);
   const words=keywords.toLowerCase().split(/\\s+/).filter(w=>w.length>2);
   let pdfPool=[...docKb]; const modIdx=pickModuleIndex(module); if(modIdx!==null) pdfPool=pdfPool.filter(k=>k.pdfIndex===modIdx);
   let kbPool=kb.map(text=>({text,source:'KB'}));
-  let combined=(words.length===0)?pdfPool:[...pdfPool,...kbPool];
-  let candidates=words.length?combined.filter(k=>words.some(w=>k.text.toLowerCase().includes(w))):combined;
-  const scored=candidates.map(k=>{ const q=keywords||module||''; let s=scoreMatch(q,k.text); if(k.source==='PDF') s+=0.15; if(k.source==='KB' && modIdx!==null) s-=0.05; return {item:k,score:s}; }).sort((a,b)=>b.score-a.score).slice(0,10);
+  let combined=[...pdfPool,...kbPool];
+  // Filter by keywords (all words should appear to be considered strong hit)
+  let candidates = combined.filter(k => words.every(w => k.text.toLowerCase().includes(w)));
+  if(candidates.length<10){ // if too few, fall back to any word
+    candidates = combined.filter(k => words.some(w => k.text.toLowerCase().includes(w)));
+  }
+  const qstr = keywords || module || '';
+  const scored=candidates.map(k=>{
+    let s=scoreMatch(qstr,k.text);
+    if(k.source==='PDF') s+=0.15;
+    if(k.source==='KB' && modIdx!==null) s-=0.05;
+    return {item:k,score:s};
+  }).sort((a,b)=>b.score-a.score).slice(0,12);
   return {hits:scored,modIdx,keywords,module};
 }
-function composeReply(query){
+
+// Compose HTML (not markdown — direct tables to avoid rendering issues)
+function composeReplyHTML(query){
   const {hits,modIdx,keywords,module}=searchAll(query);
   lastHits = hits; lastQuery = query; lastKeywords = keywords; lastModule = (modIdx!==null)?(pdfNames[modIdx]||module||'PDF'):(module?module:'All');
   document.getElementById('exportPdfBtn').disabled = (hits.length===0);
   document.getElementById('copyCsvBtn').disabled = (hits.length===0);
-  if(hits.length===0) return 'No relevant info found.\\nTip: Include a module after a dash, e.g. Interview Scheduling - Recruiting';
-  const scope=lastModule;
-  let out='Keyword & Module:\\n\\n| Keyword | Module |\\n|---------|--------|\\n| '+(keywords||'(none)')+' | '+scope+' |\\n\\n';
-  out+='Answers Found:\\n\\n| # | Snippet | Source |\\n|---|----------|--------|\\n';
-  const regex=keywords?new RegExp('('+keywords+')','ig'):null;
-  hits.forEach((h,i)=>{ let sn=h.item.text.replace(/\\n/g,' '); if(sn.length>220) sn=sn.slice(0,220)+'...'; if(regex) sn=sn.replace(regex,'<mark>$1</mark>'); let src; if(h.item.source==='KB'){ src='Excel KB'; } else { const web=pdfWebUrls[h.item.pdfIndex]||''; const label=(pdfNames[h.item.pdfIndex]||'PDF'); src=web?`<a href="${web}#page=${h.item.page}" target="_blank">${label} p.${h.item.page}</a>`:`${label} p.${h.item.page}`; } out+=`| ${i+1} | ${sn} | ${src} |\\n`; });
-  return out;
+  if(hits.length===0) return '<p>No relevant info found.<br>Tip: Include a module after a dash, e.g. <em>Interview Scheduling - Recruiting</em>.</p>';
+
+  const hi = (t)=>{
+    if(!keywords) return t;
+    return t.replace(new RegExp('('+keywords.replace(/[.*+?^${}()|[\\]\\\\]/g,'\\\\$&')+')','ig'),'<mark>$1</mark>');
+  };
+
+  let html = '';
+  // Keyword table
+  html += "<table class='chatTable'><tr><th>Keyword</th><th>Module</th></tr>";
+  html += "<tr><td>"+(keywords||'(none)')+"</td><td>"+lastModule+"</td></tr></table>";
+
+  // Answers table
+  html += "<table class='chatTable'><tr><th>#</th><th>Snippet</th><th>Source</th></tr>";
+  hits.forEach((h,i)=>{
+    let sn=(h.item.text||'').replace(/\\s+/g,' ').trim();
+    if(sn.length>280) sn=sn.slice(0,280)+'…';
+    sn = hi(sn);
+    let src='';
+    if(h.item.source==='KB'){ src='Excel KB'; }
+    else {
+      const web = pdfWebUrls[h.item.pdfIndex]||'';
+      const label = (pdfNames[h.item.pdfIndex]||'PDF') + ' p.' + h.item.page;
+      src = web ? `<a href="${web}#page=${h.item.page}" target="_blank">${label}</a>` : label;
+    }
+    html += "<tr><td>"+(i+1)+"</td><td>"+sn+"</td><td>"+src+"</td></tr>";
+  });
+  html += "</table>";
+  return html;
 }
 
+// Export / Copy
 async function exportResultsToPDF(){
   if (!lastHits || lastHits.length===0) return;
   const { jsPDF } = window.jspdf;
@@ -151,7 +206,6 @@ async function exportResultsToPDF(){
   doc.text(`Query: ${lastQuery}`, margin, 60);
   doc.text(`Module: ${lastModule}`, margin, 76);
   if(lastPublishedTS){ doc.text(`Cache published: ${new Date(lastPublishedTS).toLocaleString()}`, margin, 92); }
-  else { doc.text(`Cache published: (unknown)`, margin, 92); }
 
   const rows = lastHits.map((h,i)=>{
     const label = (h.item.source==='KB') ? 'Excel KB' : `${pdfNames[h.item.pdfIndex]||'PDF'} p.${h.item.page}`;
@@ -164,17 +218,12 @@ async function exportResultsToPDF(){
     head: [['#','Snippet','Source']],
     body: rows,
     styles: { fontSize: 9, cellPadding: 6, overflow: 'linebreak' },
-    columnStyles: {
-      0: { cellWidth: 30 },
-      1: { cellWidth: pageWidth - margin*2 - 200 },
-      2: { cellWidth: 170 }
-    },
+    columnStyles: { 0:{cellWidth:30}, 1:{cellWidth: pageWidth - margin*2 - 200}, 2:{cellWidth: 170} },
     headStyles: { fillColor: [124,58,237] }
   });
 
   doc.save('tmcoach_results.pdf');
 }
-
 function copyResultsAsCSV(){
   if (!lastHits || lastHits.length===0) return;
   const esc = (s)=>(''+s).replace(/"/g,'""');
@@ -189,6 +238,7 @@ function copyResultsAsCSV(){
   const blob = new Blob([csv], {type:'text/csv;charset=utf-8;'}); const url = URL.createObjectURL(blob); const a=document.createElement('a'); a.href=url; a.download='tmcoach_results.csv'; document.body.appendChild(a); a.click(); document.body.removeChild(a); setTimeout(()=>URL.revokeObjectURL(url),2000);
 }
 
+// Load public cache
 async function loadPublicCache(url){
   try{
     setStatus('Loading shared cache…',0.2);
@@ -197,10 +247,9 @@ async function loadPublicCache(url){
     applyCacheData(data);
   }catch(err){
     clearStatus();
-    addChat('Bot','Failed to load public cache. Make sure the URL is a Google Drive API media link and the file is shared publicly.');
+    addChat('Bot','Failed to load public cache. Make sure the URL is a Google Drive API media link (alt=media&key=...) and the JSON file is shared publicly.');
   }
 }
-
 function applyCacheData(data){
   kb=Array.isArray(data.kb)?data.kb:[];
   pdfNames=Array.isArray(data.pdfNames)?data.pdfNames:[];
@@ -216,14 +265,29 @@ function applyCacheData(data){
   addChat('Bot',`Loaded shared cache (${when}). Ready to search.`);
 }
 
-async function handleSend(){ const v=document.getElementById('userInput').value.trim(); if(!v) return; document.getElementById('userInput').value=''; document.getElementById('userInput').style.height='auto'; addChat('User',v); addChat('Bot',composeReply(v)); }
+// Send
+async function handleSend(){
+  const v=document.getElementById('userInput').value.trim();
+  if(!v) return;
+  if(docKb.length===0 && kb.length===0){ addChat('Bot','No cache loaded. Paste the public cache link below and press "Use this link".'); return; }
+  document.getElementById('userInput').value='';
+  document.getElementById('userInput').style.height='auto';
+  addChat('User',v);
+  setStatus('Searching…',0.5);
+  const html = composeReplyHTML(v);
+  clearStatus();
+  addChat('Bot', html);
+}
+
+// Events
 document.getElementById('sendBtn').onclick=handleSend;
 document.getElementById('userInput').addEventListener('keydown',e=>{ if(e.key==='Enter'&&!e.shiftKey){ e.preventDefault(); handleSend(); } });
-document.getElementById('useCache').onclick=()=>{ const v=document.getElementById('publicCacheInput').value.trim(); if(!v) return; localStorage.setItem('tmc_public_cache_url',v); addChat('Bot','Saved cache URL.'); loadPublicCache(v); };
-document.getElementById('clearCache').onclick=()=>{ localStorage.removeItem('tmc_public_cache_url'); addChat('Bot','Cleared saved cache URL.'); };
 document.getElementById('exportPdfBtn').onclick=exportResultsToPDF;
 document.getElementById('copyCsvBtn').onclick=copyResultsAsCSV;
+document.getElementById('useCache').onclick=()=>{ const v=document.getElementById('publicCacheInput').value.trim(); if(!v) return; localStorage.setItem('tmc_public_cache_url',v); addChat('Bot','Saved cache URL.'); loadPublicCache(v); };
+document.getElementById('clearCache').onclick=()=>{ localStorage.removeItem('tmc_public_cache_url'); addChat('Bot','Cleared saved cache URL.'); };
 
+// Init
 (function init(){
   const usp=new URLSearchParams(location.search);
   if(usp.get('cache')){ const u=decodeURIComponent(usp.get('cache')); localStorage.setItem('tmc_public_cache_url',u); }
