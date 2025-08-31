@@ -37,7 +37,7 @@
 <body>
 <div class="card">
   <h1>TALENT MODULE COACH — Admin</h1>
-  <div class="small">Excel KB remains in OneDrive (admin sign-in required). PDFs + Cache JSON are hosted on <strong>Google Drive (public)</strong> — no Google sign-in.</div>
+  <div class="small">Excel KB remains in OneDrive (admin sign-in required). PDFs + Cache JSON are hosted on <strong>Google Drive (public)</strong> — no Google sign-in required.</div>
   <div class="row" style="margin-top:10px">
     <button id="msLoginBtn" class="btn">Login Microsoft (for Excel KB)</button>
     <button id="buildBtn" class="btn" disabled>Build Cache</button>
@@ -81,24 +81,39 @@
   <div class="small"><strong>After you download the JSON</strong></div>
   <ol class="small">
     <li>Upload <code>tmcoach_cache.json</code> to Google Drive (any folder is OK) and set the file to <em>Anyone with the link: Viewer</em>.</li>
-    <li>Copy the file’s <strong>ID</strong> (the long ID in the URL).</li>
-    <li>Compose the public API URL (CORS-friendly):<br>
-      <code>https://www.googleapis.com/drive/v3/files/FILE_ID?alt=media&key=YOUR_API_KEY</code></li>
-    <li>Share this <em>User App URL</em> (bookmark it):<br>
-      <code id="appFmt"></code></li>
+    <li>Copy the file’s <strong>ID</strong> (the long ID in the URL OR paste the full <em>file link</em>).</li>
+    <li>Compose the public API URL (CORS-friendly) automatically below.</li>
   </ol>
+
+  <!-- ID or Link input + MAKE -->
   <div class="row">
-    <input id="jsonFileId" class="input" placeholder="Paste uploaded JSON File ID (after you upload to Drive)" />
+    <input id="jsonFileId" class="input"
+           placeholder="Paste uploaded JSON File ID OR Google Drive FILE link (…/file/d/<ID>/view)" />
     <button id="makeUserUrl" class="btn">Make User App URL</button>
-    <input id="userAppUrl" class="input" placeholder="User App URL will appear here" readonly />
   </div>
+
+  <!-- User App URL + Copy -->
+  <div class="row" style="margin-top:8px">
+    <input id="userAppUrl" class="input" placeholder="User App URL will appear here" readonly />
+    <button id="copyUserAppBtn" class="btn" title="Copy the User App URL">Copy user URL</button>
+  </div>
+
+  <!-- Raw media URL + Copy -->
+  <div class="row" style="margin-top:8px">
+    <input id="rawMediaUrl" class="input" placeholder="Raw media URL (Google Drive API) will appear here" readonly />
+    <button id="copyRawBtn" class="btn" title="Copy the raw media URL">Copy raw URL</button>
+  </div>
+
+  <div class="small" style="margin-top:8px">Format used: <code>https://www.googleapis.com/drive/v3/files/FILE_ID?alt=media&key=YOUR_API_KEY</code></div>
 </div>
 
 <script>
+// ===== CONFIG (Microsoft Graph for Excel KB only) =====
 const msClientId    = "7f3c8426-3ef5-4e28-acf0-5f51224bc0a6";
-const msRedirectUri = "https://jacjessie.github.io/learning-coach/tmc_admin_g.html";
+const msRedirectUri = "https://jacjessie.github.io/learning-coach/tmc_admin_g.html"; // update if hosted path differs
 const msScopes      = "Files.ReadWrite.All User.Read";
 
+// ===== STATE =====
 let msToken=null, workbookBase=null;
 let gFolderId = localStorage.getItem('tmc_g_folder_public') || "";
 let gApiKey   = localStorage.getItem('tmc_g_key_public') || "";
@@ -106,20 +121,49 @@ let excelShare= localStorage.getItem('tmc_excel_share') || "";
 
 let kb=[], docKb=[], pdfNames=[], pdfWebUrls=[], pdfIds=[], pdfPublicFlags=[];
 
+// ===== UI helpers =====
 const logBox = document.getElementById('log');
 function log(msg){ const d=document.createElement('div'); d.className='log'; d.innerHTML=msg; logBox.appendChild(d); logBox.scrollTop=logBox.scrollHeight; }
 function setStatus(text, ratio){ const row=document.getElementById('statusRow'); const t=document.getElementById('statusText'); const f=document.getElementById('statusFill'); row.style.display='flex'; t.textContent=text; if(typeof ratio==='number'){ f.style.width=(Math.max(0,Math.min(1,ratio))*100)+'%'; } }
 function clearStatus(){ document.getElementById('statusRow').style.display='none'; document.getElementById('statusFill').style.width='0%'; }
 function renderSources(){ const wrap=document.getElementById('sources'); wrap.innerHTML=''; pdfIds.forEach((id,i)=>{ const s=document.createElement('span'); s.className='sourceTag'; s.innerHTML=`<span>📄</span><a href="https://drive.google.com/uc?export=download&id=${id}#page=1" target="_blank">${pdfNames[i]||'PDF'}</a><span class="badge public">Public</span><span class="small" style="opacity:.7">(${docKb.filter(x=>x.pdfIndex===i).length})</span>`; wrap.appendChild(s); }); }
 
+// ===== Microsoft Graph helpers =====
 function toMsShareId(url){ let b=btoa(url).replace(/=+$/,'').replace(/\+/g,'-').replace(/\//g,'_'); return 'u!'+b; }
 async function mFetch(url,opt={}){ const res=await fetch(url,opt); if(!res.ok){ let t=""; try{t=await res.text();}catch{}; throw new Error(`HTTP ${res.status} ${res.statusText}\n${t}`);} const ct=res.headers.get("content-type")||""; if(ct.includes("json"))return res.json(); return res.text(); }
 async function resolveWorkbookBase(){ if(workbookBase) return; if(!excelShare) throw new Error("Excel share link not set."); const item=await mFetch(`https://graph.microsoft.com/v1.0/shares/${toMsShareId(excelShare)}/driveItem`,{headers:{Authorization:'Bearer '+msToken}}); const driveId=item.parentReference.driveId; const itemId=item.id; workbookBase=`https://graph.microsoft.com/v1.0/drives/${driveId}/items/${itemId}/workbook`; }
 async function readKnowledgeRows(){ try{ const tData=await mFetch(`${workbookBase}/tables`,{headers:{Authorization:'Bearer '+msToken}}); const t=(tData.value||[]).find(x=>(x.name||'').toLowerCase()==='knowledgetable'); if(t){ const rows=await mFetch(`${workbookBase}/tables('${t.name}')/rows`,{headers:{Authorization:'Bearer '+msToken}}); return (rows.value||[]).map(r=>(r.values&&r.values[0]&&r.values[0][0])?String(r.values[0][0]).trim():"").filter(Boolean); } }catch(e){} try{ const r=await mFetch(`${workbookBase}/worksheets('Knowledge')/range(address='A2:A20000')`,{headers:{Authorization:'Bearer '+msToken}}); const vals=Array.isArray(r.values)?r.values:[]; return vals.map(x=>(x&&x[0]?String(x[0]).trim():"")).filter(Boolean); }catch(e){ log('Error reading Knowledge: '+e.message); return []; } }
 
+// ===== Google Drive (public-only, via API key) =====
 async function listPdfsInFolderPublic(folderId, apiKey){ const q = `'${folderId}' in parents and mimeType='application/pdf' and trashed=false`; const url=`https://www.googleapis.com/drive/v3/files?q=${encodeURIComponent(q)}&fields=files(id,name,webViewLink)&pageSize=1000&key=${encodeURIComponent(apiKey)}`; const res=await fetch(url); if(!res.ok) throw new Error('Drive list failed'); const js=await res.json(); return js.files||[]; }
 async function downloadPdfPublic(fileId, apiKey){ const url=`https://www.googleapis.com/drive/v3/files/${fileId}?alt=media&key=${encodeURIComponent(apiKey)}`; const res=await fetch(url); if(!res.ok) throw new Error('Drive download failed'); return await res.arrayBuffer(); }
 
+// ===== File ID extraction utilities =====
+function extractDriveFileId(input) {
+  if (!input) return "";
+  const s = input.trim();
+  if (/^[A-Za-z0-9_-]{20,}$/.test(s)) return s; // already looks like ID
+  try {
+    const url = new URL(s);
+    if (/\/folders\//i.test(url.pathname)) {
+      alert("That is a folder link. Please paste the JSON FILE link (…/file/d/<ID>/view) or the File ID.");
+      return "";
+    }
+    const m1 = url.pathname.match(/\/file\/d\/([A-Za-z0-9_-]{20,})/);
+    if (m1) return m1[1];
+    const m2 = url.pathname.match(/\/d\/([A-Za-z0-9_-]{20,})/);
+    if (m2) return m2[1];
+    const qpId = url.searchParams.get("id");
+    if (qpId && /^[A-Za-z0-9_-]{20,}$/.test(qpId)) return qpId;
+  } catch (_) {}
+  const m3 = s.match(/([A-Za-z0-9_-]{20,})/);
+  return m3 ? m3[1] : "";
+}
+function buildRawMediaUrl(fileId, apiKey) {
+  return `https://www.googleapis.com/drive/v3/files/${fileId}?alt=media&key=${encodeURIComponent(apiKey)}`;
+}
+
+// ===== Build & Download JSON =====
 async function buildCache(){
   if(!msToken) return alert('Login Microsoft first.');
   if(!gFolderId || !gApiKey) return alert('Set Google Folder ID and API Key, then Save.');
@@ -140,7 +184,7 @@ async function buildCache(){
     pdfNames[i]=f.name.replace(/\.pdf$/i,'');
     pdfIds[i]=f.id;
     pdfWebUrls[i]=`https://drive.google.com/uc?export=download&id=${f.id}`;
-    pdfPublicFlags[i]=true;
+    pdfPublicFlags[i]=true; // assume public
     setStatus(`Scanning ${pdfNames[i]}…`,0.25+(i/files.length)*0.6);
     try{
       const buf=await downloadPdfPublic(f.id, gApiKey);
@@ -160,7 +204,8 @@ async function buildCache(){
   document.getElementById('pdfCount').style.display='inline-block';
   document.getElementById('pdfCount').textContent='PDF: '+docKb.length;
   renderSources();
-  document.getElementById('downloadBtn').disabled=true;
+  document.getElementById('downloadBtn').disabled=true; // will enable after JSON ready
+  // Build cache object
   window.__cacheObj = { version:1, ts:Date.now(), kb, pdfNames, pdfWebUrls, pdfPublicFlags, docKb };
   document.getElementById('downloadBtn').disabled=false;
   log(`Cache built. KB rows=${kb.length}, PDF chunks=${docKb.length}, PDFs=${pdfNames.length}. Click "Download Cache JSON".`);
@@ -174,27 +219,64 @@ function downloadJson(){
   a.download = 'tmcoach_cache.json';
   document.body.appendChild(a); a.click(); document.body.removeChild(a);
   setTimeout(()=>URL.revokeObjectURL(a.href), 1500);
-  log('Downloaded tmcoach_cache.json. Upload it to Google Drive, make it public, then paste the File ID below to generate the User link.');
+  log('Downloaded tmcoach_cache.json. Upload it to Google Drive, make it public, then paste the File ID or file link below to generate the User link.');
 }
 
+// ===== Buttons =====
 document.getElementById('msLoginBtn').onclick = ()=>{
   const tenant="common"; const p=new URLSearchParams({client_id:msClientId,response_type:"token",redirect_uri:msRedirectUri,scope:msScopes,prompt:"select_account"});
   location.assign(`https://login.microsoftonline.com/${tenant}/oauth2/v2.0/authorize?${p}`);
 };
 document.getElementById('buildBtn').onclick = buildCache;
 document.getElementById('downloadBtn').onclick = downloadJson;
-document.getElementById('saveG').onclick = ()=>{ gFolderId=document.getElementById('gFolderId').value.trim(); gApiKey=document.getElementById('gApiKey').value.trim(); localStorage.setItem('tmc_g_folder_public',gFolderId); localStorage.setItem('tmc_g_key_public',gApiKey); alert('Saved.'); };
-document.getElementById('saveExcelLink').onclick = ()=>{ excelShare=document.getElementById('excelShareLink').value.trim(); localStorage.setItem('tmc_excel_share',excelShare); alert('Saved.'); };
+document.getElementById('saveG').onclick = ()=>{ gFolderId=document.getElementById('gFolderId').value.trim(); gApiKey=document.getElementById('gApiKey').value.trim(); localStorage.setItem('tmc_g_folder_public',gFolderId); localStorage.setItem('tmc_g_key_public',gApiKey); alert('Saved Google settings.'); };
+document.getElementById('saveExcelLink').onclick = ()=>{ excelShare=document.getElementById('excelShareLink').value.trim(); localStorage.setItem('tmc_excel_share',excelShare); alert('Saved Excel link.'); };
+
+// ===== File ID → URLs
+function extractDriveFileId(input) {
+  if (!input) return "";
+  const s = input.trim();
+  if (/^[A-Za-z0-9_-]{20,}$/.test(s)) return s;
+  try {
+    const url = new URL(s);
+    if (/\/folders\//i.test(url.pathname)) { alert("That is a folder link. Please paste the JSON FILE link (…/file/d/<ID>/view) or the File ID."); return ""; }
+    const m1 = url.pathname.match(/\/file\/d\/([A-Za-z0-9_-]{20,})/); if (m1) return m1[1];
+    const m2 = url.pathname.match(/\/d\/([A-Za-z0-9_-]{20,})/); if (m2) return m2[1];
+    const qpId = url.searchParams.get("id"); if (qpId && /^[A-Za-z0-9_-]{20,}$/.test(qpId)) return qpId;
+  } catch (_) {}
+  const m3 = s.match(/([A-Za-z0-9_-]{20,})/);
+  return m3 ? m3[1] : "";
+}
+function buildRawMediaUrl(fileId, apiKey) { return `https://www.googleapis.com/drive/v3/files/${fileId}?alt=media&key=${encodeURIComponent(apiKey)}`; }
+
 document.getElementById('makeUserUrl').onclick = ()=>{
-  const fileId = document.getElementById('jsonFileId').value.trim();
-  if(!fileId || !gApiKey){ alert('Enter JSON File ID and API Key.'); return; }
-  const cacheUrl = `https://www.googleapis.com/drive/v3/files/${fileId}?alt=media&key=${encodeURIComponent(gApiKey)}`;
+  const raw = document.getElementById('jsonFileId').value.trim();
+  const fileId = extractDriveFileId(raw);
+  if(!fileId){ alert('Please paste a Google Drive FILE link (…/file/d/<ID>/view) or the File ID for the JSON.'); return; }
+  if(!gApiKey){ alert('Enter your Google API key (and click Save) before generating the URL.'); return; }
+  const cacheUrl = buildRawMediaUrl(fileId, gApiKey);
   const appUrl = location.origin + location.pathname.replace(/[^/]+$/,'') + 'tmc_user_g.html?cache=' + encodeURIComponent(cacheUrl);
+  document.getElementById('rawMediaUrl').value = cacheUrl;
   document.getElementById('userAppUrl').value = appUrl;
-  document.getElementById('appFmt').textContent = appUrl;
-  log(`User App URL created: <a class="inline" target="_blank" href="${appUrl}">${appUrl}</a>`);
+  log(`User App URL created: <a class="inline" target="_blank" href="${appUrl}">${appUrl}</a><br>
+       <span class="small">Raw media URL:</span> <a class="inline" target="_blank" href="${cacheUrl}">${cacheUrl}</a>`);
 };
 
+// Copy buttons
+document.getElementById('copyRawBtn').onclick = async ()=>{
+  const el = document.getElementById('rawMediaUrl');
+  const val = el.value.trim();
+  if(!val){ alert('Generate the raw URL first.'); return; }
+  try { await (navigator.clipboard?.writeText ? navigator.clipboard.writeText(val) : (el.select(), document.execCommand('copy'))); log('Raw media URL copied to clipboard.'); } catch(e){ log('Could not copy automatically.'); }
+};
+document.getElementById('copyUserAppBtn').onclick = async ()=>{
+  const el = document.getElementById('userAppUrl');
+  const val = el.value.trim();
+  if(!val){ alert('Generate the User App URL first.'); return; }
+  try { await (navigator.clipboard?.writeText ? navigator.clipboard.writeText(val) : (el.select(), document.execCommand('copy'))); log('User App URL copied to clipboard.'); } catch(e){ log('Could not copy automatically.'); }
+};
+
+// ===== Capture MS token on load =====
 (function init(){
   document.getElementById('gFolderId').value = gFolderId;
   document.getElementById('gApiKey').value = gApiKey;
