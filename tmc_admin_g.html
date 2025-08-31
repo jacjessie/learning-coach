@@ -1,0 +1,209 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<title>TALENT MODULE COACH — Admin (OneDrive KB + Public Google Drive PDFs)</title>
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js"></script>
+<style>
+  :root { --bg:#07102a; --card:#0b1220; --text:#e6eef8; --muted:#a9b8d9; --accent:#7c3aed; --line:#24305e; }
+  *{box-sizing:border-box}
+  body {font-family: Arial, system-ui; background:var(--bg); color:var(--text); margin:20px;}
+  .card{background:var(--card);padding:14px;border-radius:14px;margin-bottom:20px;}
+  h1{margin:0 0 6px 0;font-size:22px}
+  .row{display:flex;gap:10px;flex-wrap:wrap;align-items:flex-start}
+  .btn{background:var(--accent);border:none;padding:8px 12px;border-radius:10px;color:white;cursor:pointer;text-decoration:none;display:inline-flex;align-items:center;gap:8px}
+  .btn.secondary{background:#475569}
+  .input{width:100%;background:#0b152d;border:1px solid #2a3a6c;color:#cfe0ff;border-radius:8px;padding:8px}
+  .tag{display:inline-block;background:#1a2448;border:1px solid #24305e;border-radius:14px;padding:2px 8px;margin-left:6px;font-size:12px;opacity:.9}
+  .badge{display:inline-block;padding:2px 6px;border-radius:10px;font-size:11px;margin-left:6px}
+  .badge.public{background:#14532d;border:1px solid #166534;color:#bbf7d0}
+  .small{opacity:.85;font-size:12px}
+  #log{min-height:120px;max-height:420px;overflow:auto;border:1px solid rgba(255,255,255,.08);padding:10px;border-radius:10px;background:rgba(255,255,255,.02)}
+  .log{margin:6px 0;padding:8px;background:rgba(255,255,255,.03);border-radius:8px;font-size:13px}
+  .sources{display:flex;gap:6px;flex-wrap:wrap;margin-top:6px}
+  .sourceTag{display:inline-flex;gap:6px;align-items:center;background:#0f1a3d;border:1px solid #22336b;border-radius:14px;padding:4px 8px}
+  .sourceTag a{color:#cbd5ff;text-decoration:none}
+  .status{display:flex;align-items:center;gap:10px;margin-top:8px}
+  .spinner { width:14px; height:14px; border:2px solid rgba(255,255,255,0.25); border-top-color:#cbd5ff; border-radius:50%; animation:spin 0.9s linear infinite; }
+  @keyframes spin { from { transform: rotate(0deg);} to { transform: rotate(360deg);} }
+  .bar { width:260px;height:6px;background:rgba(255,255,255,.15);border-radius:6px;overflow:hidden }
+  .bar > span{display:block;height:100%;width:0%;background:var(--accent);transition:width .2s}
+  .grid2{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+  .inline{color:#cbd5ff}
+</style>
+</head>
+<body>
+<div class="card">
+  <h1>TALENT MODULE COACH — Admin</h1>
+  <div class="small">Excel KB remains in OneDrive (admin sign-in required). PDFs + Cache JSON are hosted on <strong>Google Drive (public)</strong> — no Google sign-in.</div>
+  <div class="row" style="margin-top:10px">
+    <button id="msLoginBtn" class="btn">Login Microsoft (for Excel KB)</button>
+    <button id="buildBtn" class="btn" disabled>Build Cache</button>
+    <button id="downloadBtn" class="btn" disabled>Download Cache JSON</button>
+    <span id="pdfCount" class="tag" style="display:none">PDF: 0</span>
+  </div>
+  <div class="grid2" style="margin-top:10px">
+    <div class="card" style="margin:0">
+      <div class="small"><strong>OneDrive Excel</strong></div>
+      <div class="small">Share link (same Excel used before):</div>
+      <input id="excelShareLink" class="input" placeholder="Paste OneDrive Excel share link" />
+      <button id="saveExcelLink" class="btn" style="margin-top:6px">Save</button>
+    </div>
+    <div class="card" style="margin:0">
+      <div class="small"><strong>Google Drive (Public) — PDFs & Folder</strong></div>
+      <div class="small">Drive <em>Folder ID</em> that contains all PDFs (must be shared: Anyone with the link can view).</div>
+      <input id="gFolderId" class="input" placeholder="Paste Google Drive Folder ID" />
+      <div class="small" style="margin-top:6px">Google <em>API Key</em> (referrer-restricted) to read public files via Drive API.</div>
+      <input id="gApiKey" class="input" placeholder="Paste Google API key" />
+      <button id="saveG" class="btn" style="margin-top:6px">Save</button>
+    </div>
+  </div>
+  <div id="statusRow" class="status" style="display:none">
+    <div class="spinner"></div><span id="statusText" class="small">Loading…</span>
+    <div class="bar"><span id="statusFill"></span></div>
+  </div>
+</div>
+
+<div class="card">
+  <div class="row" style="justify-content:space-between;align-items:center">
+    <div>
+      <div class="small">Sources (Google Drive PDFs)</div>
+      <div class="small">Legend: <span class="badge public">Public</span></div>
+    </div>
+    <div id="sources" class="sources"></div>
+  </div>
+  <div id="log"></div>
+</div>
+
+<div class="card">
+  <div class="small"><strong>After you download the JSON</strong></div>
+  <ol class="small">
+    <li>Upload <code>tmcoach_cache.json</code> to Google Drive (any folder is OK) and set the file to <em>Anyone with the link: Viewer</em>.</li>
+    <li>Copy the file’s <strong>ID</strong> (the long ID in the URL).</li>
+    <li>Compose the public API URL (CORS-friendly):<br>
+      <code>https://www.googleapis.com/drive/v3/files/FILE_ID?alt=media&key=YOUR_API_KEY</code></li>
+    <li>Share this <em>User App URL</em> (bookmark it):<br>
+      <code id="appFmt"></code></li>
+  </ol>
+  <div class="row">
+    <input id="jsonFileId" class="input" placeholder="Paste uploaded JSON File ID (after you upload to Drive)" />
+    <button id="makeUserUrl" class="btn">Make User App URL</button>
+    <input id="userAppUrl" class="input" placeholder="User App URL will appear here" readonly />
+  </div>
+</div>
+
+<script>
+const msClientId    = "7f3c8426-3ef5-4e28-acf0-5f51224bc0a6";
+const msRedirectUri = "https://jacjessie.github.io/learning-coach/tmc_admin_g.html";
+const msScopes      = "Files.ReadWrite.All User.Read";
+
+let msToken=null, workbookBase=null;
+let gFolderId = localStorage.getItem('tmc_g_folder_public') || "";
+let gApiKey   = localStorage.getItem('tmc_g_key_public') || "";
+let excelShare= localStorage.getItem('tmc_excel_share') || "";
+
+let kb=[], docKb=[], pdfNames=[], pdfWebUrls=[], pdfIds=[], pdfPublicFlags=[];
+
+const logBox = document.getElementById('log');
+function log(msg){ const d=document.createElement('div'); d.className='log'; d.innerHTML=msg; logBox.appendChild(d); logBox.scrollTop=logBox.scrollHeight; }
+function setStatus(text, ratio){ const row=document.getElementById('statusRow'); const t=document.getElementById('statusText'); const f=document.getElementById('statusFill'); row.style.display='flex'; t.textContent=text; if(typeof ratio==='number'){ f.style.width=(Math.max(0,Math.min(1,ratio))*100)+'%'; } }
+function clearStatus(){ document.getElementById('statusRow').style.display='none'; document.getElementById('statusFill').style.width='0%'; }
+function renderSources(){ const wrap=document.getElementById('sources'); wrap.innerHTML=''; pdfIds.forEach((id,i)=>{ const s=document.createElement('span'); s.className='sourceTag'; s.innerHTML=`<span>📄</span><a href="https://drive.google.com/uc?export=download&id=${id}#page=1" target="_blank">${pdfNames[i]||'PDF'}</a><span class="badge public">Public</span><span class="small" style="opacity:.7">(${docKb.filter(x=>x.pdfIndex===i).length})</span>`; wrap.appendChild(s); }); }
+
+function toMsShareId(url){ let b=btoa(url).replace(/=+$/,'').replace(/\+/g,'-').replace(/\//g,'_'); return 'u!'+b; }
+async function mFetch(url,opt={}){ const res=await fetch(url,opt); if(!res.ok){ let t=""; try{t=await res.text();}catch{}; throw new Error(`HTTP ${res.status} ${res.statusText}\n${t}`);} const ct=res.headers.get("content-type")||""; if(ct.includes("json"))return res.json(); return res.text(); }
+async function resolveWorkbookBase(){ if(workbookBase) return; if(!excelShare) throw new Error("Excel share link not set."); const item=await mFetch(`https://graph.microsoft.com/v1.0/shares/${toMsShareId(excelShare)}/driveItem`,{headers:{Authorization:'Bearer '+msToken}}); const driveId=item.parentReference.driveId; const itemId=item.id; workbookBase=`https://graph.microsoft.com/v1.0/drives/${driveId}/items/${itemId}/workbook`; }
+async function readKnowledgeRows(){ try{ const tData=await mFetch(`${workbookBase}/tables`,{headers:{Authorization:'Bearer '+msToken}}); const t=(tData.value||[]).find(x=>(x.name||'').toLowerCase()==='knowledgetable'); if(t){ const rows=await mFetch(`${workbookBase}/tables('${t.name}')/rows`,{headers:{Authorization:'Bearer '+msToken}}); return (rows.value||[]).map(r=>(r.values&&r.values[0]&&r.values[0][0])?String(r.values[0][0]).trim():"").filter(Boolean); } }catch(e){} try{ const r=await mFetch(`${workbookBase}/worksheets('Knowledge')/range(address='A2:A20000')`,{headers:{Authorization:'Bearer '+msToken}}); const vals=Array.isArray(r.values)?r.values:[]; return vals.map(x=>(x&&x[0]?String(x[0]).trim():"")).filter(Boolean); }catch(e){ log('Error reading Knowledge: '+e.message); return []; } }
+
+async function listPdfsInFolderPublic(folderId, apiKey){ const q = `'${folderId}' in parents and mimeType='application/pdf' and trashed=false`; const url=`https://www.googleapis.com/drive/v3/files?q=${encodeURIComponent(q)}&fields=files(id,name,webViewLink)&pageSize=1000&key=${encodeURIComponent(apiKey)}`; const res=await fetch(url); if(!res.ok) throw new Error('Drive list failed'); const js=await res.json(); return js.files||[]; }
+async function downloadPdfPublic(fileId, apiKey){ const url=`https://www.googleapis.com/drive/v3/files/${fileId}?alt=media&key=${encodeURIComponent(apiKey)}`; const res=await fetch(url); if(!res.ok) throw new Error('Drive download failed'); return await res.arrayBuffer(); }
+
+async function buildCache(){
+  if(!msToken) return alert('Login Microsoft first.');
+  if(!gFolderId || !gApiKey) return alert('Set Google Folder ID and API Key, then Save.');
+
+  setStatus('Reading Excel KB…',0.1);
+  await resolveWorkbookBase();
+  kb=await readKnowledgeRows();
+  log('Excel KB loaded. Rows: '+kb.length);
+
+  setStatus('Listing PDFs in Google Drive…',0.2);
+  let files=[];
+  try{ files=await listPdfsInFolderPublic(gFolderId, gApiKey); }catch(e){ clearStatus(); log('Could not list Google folder. Ensure folder is public and API key is valid.'); return; }
+  if(!files.length){ clearStatus(); log('No PDFs found in that Google folder.'); return; }
+
+  pdfNames=[]; pdfWebUrls=[]; pdfIds=[]; pdfPublicFlags=[]; docKb=[];
+  for(let i=0;i<files.length;i++){
+    const f=files[i];
+    pdfNames[i]=f.name.replace(/\.pdf$/i,'');
+    pdfIds[i]=f.id;
+    pdfWebUrls[i]=`https://drive.google.com/uc?export=download&id=${f.id}`;
+    pdfPublicFlags[i]=true;
+    setStatus(`Scanning ${pdfNames[i]}…`,0.25+(i/files.length)*0.6);
+    try{
+      const buf=await downloadPdfPublic(f.id, gApiKey);
+      const pdf=await pdfjsLib.getDocument({data:buf}).promise;
+      for(let p=1;p<=pdf.numPages;p++){
+        const page=await pdf.getPage(p); const tc=await page.getTextContent(); const txt=tc.items.map(it=>it.str).join(" ").replace(/\s+/g," ").trim();
+        const size=500,over=80;
+        for(let j=0;j<txt.length;j+=(size-over)){
+          const chunk=txt.slice(j,j+size).trim();
+          if(chunk.length>60) docKb.push({text:chunk,source:'PDF',page:p,pdfIndex:i});
+        }
+      }
+      log(`Parsed ${pdfNames[i]} ✔`);
+    }catch(e){ log(`Error reading ${pdfNames[i]}: ${e.message}`); }
+  }
+  clearStatus();
+  document.getElementById('pdfCount').style.display='inline-block';
+  document.getElementById('pdfCount').textContent='PDF: '+docKb.length;
+  renderSources();
+  document.getElementById('downloadBtn').disabled=true;
+  window.__cacheObj = { version:1, ts:Date.now(), kb, pdfNames, pdfWebUrls, pdfPublicFlags, docKb };
+  document.getElementById('downloadBtn').disabled=false;
+  log(`Cache built. KB rows=${kb.length}, PDF chunks=${docKb.length}, PDFs=${pdfNames.length}. Click "Download Cache JSON".`);
+}
+
+function downloadJson(){
+  const data = JSON.stringify(window.__cacheObj||{}, null, 0);
+  const blob = new Blob([data], {type:'application/json'});
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = 'tmcoach_cache.json';
+  document.body.appendChild(a); a.click(); document.body.removeChild(a);
+  setTimeout(()=>URL.revokeObjectURL(a.href), 1500);
+  log('Downloaded tmcoach_cache.json. Upload it to Google Drive, make it public, then paste the File ID below to generate the User link.');
+}
+
+document.getElementById('msLoginBtn').onclick = ()=>{
+  const tenant="common"; const p=new URLSearchParams({client_id:msClientId,response_type:"token",redirect_uri:msRedirectUri,scope:msScopes,prompt:"select_account"});
+  location.assign(`https://login.microsoftonline.com/${tenant}/oauth2/v2.0/authorize?${p}`);
+};
+document.getElementById('buildBtn').onclick = buildCache;
+document.getElementById('downloadBtn').onclick = downloadJson;
+document.getElementById('saveG').onclick = ()=>{ gFolderId=document.getElementById('gFolderId').value.trim(); gApiKey=document.getElementById('gApiKey').value.trim(); localStorage.setItem('tmc_g_folder_public',gFolderId); localStorage.setItem('tmc_g_key_public',gApiKey); alert('Saved.'); };
+document.getElementById('saveExcelLink').onclick = ()=>{ excelShare=document.getElementById('excelShareLink').value.trim(); localStorage.setItem('tmc_excel_share',excelShare); alert('Saved.'); };
+document.getElementById('makeUserUrl').onclick = ()=>{
+  const fileId = document.getElementById('jsonFileId').value.trim();
+  if(!fileId || !gApiKey){ alert('Enter JSON File ID and API Key.'); return; }
+  const cacheUrl = `https://www.googleapis.com/drive/v3/files/${fileId}?alt=media&key=${encodeURIComponent(gApiKey)}`;
+  const appUrl = location.origin + location.pathname.replace(/[^/]+$/,'') + 'tmc_user_g.html?cache=' + encodeURIComponent(cacheUrl);
+  document.getElementById('userAppUrl').value = appUrl;
+  document.getElementById('appFmt').textContent = appUrl;
+  log(`User App URL created: <a class="inline" target="_blank" href="${appUrl}">${appUrl}</a>`);
+};
+
+(function init(){
+  document.getElementById('gFolderId').value = gFolderId;
+  document.getElementById('gApiKey').value = gApiKey;
+  document.getElementById('excelShareLink').value = excelShare;
+  if(location.hash){
+    const p=new URLSearchParams(location.hash.substring(1)); const t=p.get('access_token');
+    if(t){ msToken=t; history.replaceState({},'',location.pathname+location.search); document.getElementById('buildBtn').disabled=false; log('Microsoft signed in.'); }
+  }
+})();
+</script>
+</body>
+</html>
