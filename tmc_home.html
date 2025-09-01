@@ -5,796 +5,197 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>CASE TRIAGE CONSOLE — Home</title>
 <style>
-/* ===================== Dayforce Blue Theme ===================== */
 :root{
-  /* Dayforce brand blues */
-  --brand-cyan: #1fd1ff;   /* bright cyan */
-  --brand-blue: #0a66ff;   /* main blue */
-  --brand-deep: #003fe0;   /* deep edge blue */
-
-  /* App surface (dark, readable) */
-  --bg:#061a3a;            /* deep navy background */
-  --panel:#0a234f;         /* panels */
-  --text:#f1f7ff;          /* near white text */
-  --muted:#b9d3ff;         /* slate text */
-
-  /* Accents */
-  --accent:#0a66ff;        /* primary buttons/focus */
-  --accent-2:#1fd1ff;      /* secondary accent (cyan) */
-  --ok:#19b36b;
-  --warn:#f8b23c;
+  --brand-cyan:#1fd1ff; --brand-blue:#0a66ff; --brand-deep:#003fe0;
+  --bg:#061a3a; --panel:#0a234f; --text:#f1f7ff; --muted:#b9d3ff;
 }
-
-*{box-sizing:border-box}
-body{margin:0;font-family:Inter,Segoe UI,system-ui,Arial,sans-serif;background:var(--bg);color:var(--text);}
-
-/* Header with bright Dayforce gradient */
-.header{
-  position:sticky; top:0; z-index:2;
-  display:flex; align-items:center; gap:14px;
-  padding:10px 16px; border-bottom:1px solid rgba(255,255,255,.06);
-  color:var(--text);
-  background:
-    radial-gradient(900px 340px at 0% 0%, rgba(31,209,255,.38), transparent 60%),
-    radial-gradient(900px 340px at 100% 100%, rgba(10,102,255,.35), transparent 60%),
-    linear-gradient(135deg, var(--brand-blue) 0%, var(--brand-deep) 60%);
-  box-shadow: inset 0 -1px 0 rgba(255,255,255,.04);
-  backdrop-filter: blur(2px);
-}
-
-/* optional blue hero strip beneath header */
-.brand-hero {
-  height:44px;
-  background:
-    radial-gradient(800px 300px at 10% 0%, rgba(31,209,255,.35), transparent 55%),
-    radial-gradient(900px 340px at 90% 120%, rgba(10,102,255,.30), transparent 60%),
-    linear-gradient(135deg, var(--brand-blue), var(--brand-deep));
-  border-bottom:1px solid rgba(255,255,255,.06);
-  display:flex; align-items:center; padding:0 18px; font-size:12px; color:#e9f4ff; opacity:.9;
-}
-
-/* Embedded Dayforce-style logo (SVG) — no user upload */
-.logoWrap{
-  width:36px;height:36px;border-radius:8px;overflow:hidden;
-  display:flex;align-items:center;justify-content:center;
-  box-shadow: 0 4px 14px rgba(10,102,255,.28);
-}
+*{box-sizing:border-box} body{margin:0;font-family:Inter,Segoe UI,system-ui,Arial,sans-serif;background:var(--bg);color:var(--text)}
+.header{position:sticky;top:0;z-index:2;display:flex;align-items:center;gap:14px;padding:10px 16px;border-bottom:1px solid rgba(255,255,255,.06);
+  background:radial-gradient(900px 340px at 0% 0%, rgba(31,209,255,.38), transparent 60%),radial-gradient(900px 340px at 100% 100%, rgba(10,102,255,.35), transparent 60%),linear-gradient(135deg, var(--brand-blue) 0%, var(--brand-deep) 60%);}
+.logoWrap{width:36px;height:36px;border-radius:8px;overflow:hidden;display:flex;align-items:center;justify-content:center;box-shadow:0 4px 14px rgba(10,102,255,.28)}
 .title{font-size:20px;font-weight:700;letter-spacing:.3px}
-.badge{
-  background:rgba(255,255,255,.08);
-  border:1px solid rgba(31,209,255,.45);
-  color:#dff4ff; padding:2px 8px;border-radius:999px;font-size:12px
-}
-
-.main{display:grid;grid-template-columns:260px 1fr;gap:16px;padding:16px 20px;min-height:calc(100vh - 68px);}
-.sidebar{background:var(--panel);border:1px solid rgba(255,255,255,.08);border-radius:14px;padding:10px;height:fit-content;position:sticky;top:92px}
-
-.menuBtn{display:flex;gap:10px;align-items:center;width:100%;
-  background:rgba(255,255,255,.02);border:1px solid rgba(255,255,255,.08);color:var(--text);
+.badge{background:rgba(255,255,255,.08);border:1px solid rgba(31,209,255,.45);padding:2px 8px;border-radius:999px;font-size:12px}
+.brand-hero{height:44px;background:radial-gradient(800px 300px at 10% 0%, rgba(31,209,255,.35), transparent 55%),radial-gradient(900px 340px at 90% 120%, rgba(10,102,255,.30), transparent 60%),linear-gradient(135deg, var(--brand-blue), var(--brand-deep));border-bottom:1px solid rgba(255,255,255,.06);display:flex;align-items:center;padding:0 18px;font-size:12px;opacity:.9}
+.main{display:grid;grid-template-columns:260px 1fr;gap:16px;padding:16px 20px;min-height:calc(100vh - 68px)}
+.sidebar{background:#0a234f;border:1px solid rgba(255,255,255,.08);border-radius:14px;padding:10px;height:fit-content;position:sticky;top:92px}
+.menuBtn{display:flex;gap:10px;align-items:center;width:100%;background:rgba(255,255,255,.02);border:1px solid rgba(255,255,255,.08);color:var(--text);
   padding:10px;border-radius:10px;margin:6px 0;cursor:pointer;text-align:left;}
-.menuBtn.active{
-  border-color: rgba(31,209,255,.65);
-  box-shadow: 0 0 0 2px rgba(31,209,255,.18) inset, 0 4px 14px rgba(10,102,255,.2);
-  background: linear-gradient(135deg, rgba(31,209,255,.08), rgba(10,102,255,.08));
-}
-
-.content{min-height:520px}
-.panel{
-  background: var(--panel);
-  border:1px solid rgba(255,255,255,.08);
-  border-radius:14px;padding:14px;margin-bottom:16px;
-}
+.menuBtn.active{border-color: rgba(31,209,255,.65);box-shadow:0 0 0 2px rgba(31,209,255,.18) inset, 0 4px 14px rgba(10,102,255,.2);
+  background:linear-gradient(135deg, rgba(31,209,255,.08), rgba(10,102,255,.08));}
+.panel{background:#0a234f;border:1px solid rgba(255,255,255,.08);border-radius:14px;padding:14px;margin-bottom:16px}
 .row{display:flex;gap:12px;flex-wrap:wrap}
 .input, textarea, select{background:#0b152d;border:1px solid #2a4fa2;color:#d7e6ff;border-radius:10px;padding:10px;font:inherit}
-textarea{min-height:80px;resize:vertical}
-
-.btn{
-  background: linear-gradient(135deg, var(--brand-cyan), var(--brand-blue));
-  color:white;border:none;border-radius:10px;padding:10px 14px;cursor:pointer;
-  box-shadow: 0 6px 16px rgba(10,102,255,.25);
-  transition: transform .06s ease, box-shadow .2s ease, opacity .15s ease;
-}
-.btn:hover{ transform: translateY(-1px); box-shadow: 0 10px 22px rgba(10,102,255,.32); }
-.btn:active{ transform: translateY(0); box-shadow: 0 6px 16px rgba(10,102,255,.25); }
-.btn.secondary{ background:#475569; box-shadow:none; }
-.btn.ghost{ background:transparent;border:1px solid #2a4fa2;color:#d7e6ff; box-shadow:none; }
-
-.kpill{
-  display:inline-flex;gap:6px;align-items:center;
-  background:#0d2e6c;border:1px solid #2556be;color:#d7e8ff;
-  border-radius:999px;padding:4px 10px;font-size:12px;margin:3px 6px 0 0
-}
-
+.btn{background:linear-gradient(135deg, var(--brand-cyan), var(--brand-blue));color:#fff;border:none;border-radius:10px;padding:10px 14px;cursor:pointer}
+.btn.secondary{background:#475569}
+.btn.ghost{background:transparent;border:1px solid #2a4fa2}
+.notice{display:flex;gap:8px;align-items:center;background:#132d6a;border:1px solid #295cce;color:#d8e9ff;padding:8px 10px;border-radius:10px;font-size:12px}
+.notice:before{content:"⚠️"}
+.small{font-size:12px;opacity:.9}
+.twoCol{display:grid;grid-template-columns:1fr 1fr;gap:12px}
 .table{width:100%;border-collapse:collapse;margin-top:8px}
 .table th,.table td{border:1px solid rgba(255,255,255,.12);padding:8px;vertical-align:top}
 .table th{background:rgba(255,255,255,.06)}
 a{color:#9ec5ff}
-.small{font-size:12px;opacity:.9}
-.hint{font-size:12px;color:#cfe0ff;opacity:.85;margin-top:6px}
-footer{padding:14px 20px;color:var(--muted)}
-
-.notice{display:flex;gap:8px;align-items:center;background:#132d6a;border:1px solid #295cce;color:#d8e9ff;padding:8px 10px;border-radius:10px;font-size:12px}
-.notice:before{content:"⚠️"}
-
-.twoCol{display:grid;grid-template-columns:1fr 1fr;gap:12px}
-@media (max-width: 960px){ .main{grid-template-columns: 1fr;} .twoCol{grid-template-columns:1fr;} .sidebar{position:static} }
-
-/* Feedback embeds */
+@media (max-width:960px){.main{grid-template-columns:1fr}.twoCol{grid-template-columns:1fr}.sidebar{position:static}}
 .iframeBox iframe{width:100%; height:560px; border:0; border-radius:10px;}
 </style>
 </head>
 <body>
-  <header class="header">
-    <div class="logoWrap" aria-hidden="true">
-      <!-- Inline SVG approximating the Dayforce icon (gradient + white 'd') -->
-      <svg viewBox="0 0 64 64" width="36" height="36" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Dayforce">
-        <defs>
-          <linearGradient id="g" x1="0" y1="0" x2="1" y2="1">
-            <stop offset="0" stop-color="#0a66ff"/>
-            <stop offset="1" stop-color="#1fd1ff"/>
-          </linearGradient>
-        </defs>
-        <rect width="64" height="64" rx="8" fill="url(#g)"/>
-        <text x="18" y="50" font-size="48" font-weight="800" font-family="Inter, Segoe UI, Arial, sans-serif" fill="#fff">d</text>
-      </svg>
+<header class="header">
+  <div class="logoWrap">
+    <svg viewBox="0 0 64 64" width="36" height="36" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Dayforce">
+      <defs><linearGradient id="g" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#0a66ff"/><stop offset="1" stop-color="#1fd1ff"/></linearGradient></defs>
+      <rect width="64" height="64" rx="8" fill="url(#g)"/><text x="18" y="50" font-size="48" font-weight="800" font-family="Inter, Segoe UI, Arial, sans-serif" fill="#fff">d</text>
+    </svg>
+  </div>
+  <div class="title">CASE TRIAGE CONSOLE</div>
+  <span class="badge">Home</span>
+  <div style="margin-left:auto" class="small">Dayforce blue — bright header & buttons, readable dark UI</div>
+</header>
+<div class="brand-hero">Point every case to the best path.</div>
+
+<section class="main">
+  <aside class="sidebar">
+    <button class="menuBtn active" data-view="home">🏠 Home</button>
+    <button class="menuBtn" data-view="cav">🧭 Correct Routing (Queue Compass)</button>
+    <button class="menuBtn" data-view="probing">💬 Probing Questions</button>
+    <button class="menuBtn" data-view="notes">📝 Internal Notes</button>
+    <button class="menuBtn" data-view="kb">📚 KB Search</button>
+    <button class="menuBtn" data-view="feedback">💡 Feedback</button>
+    <div class="panel small" style="margin-top:8px">This page is static. Admins configure endpoints via <code>localStorage</code>. Users do not sign in.</div>
+  </aside>
+
+  <main class="content">
+    <!-- HOME -->
+    <div id="view-home" class="panel">
+      <h2 style="margin:6px 0 10px 0">Welcome, Triage Team! 👋</h2>
+      <div class="notice">Always review internal notes and probing QQs suggestions before sending to client.</div>
+      <p style="margin:10px 0 0 0">Pick a workflow to get started.</p>
+
+      <div class="twoCol" style="margin-top:12px">
+        <div class="panel" style="margin:0">
+          <h3>🧭 Correct Routing (Queue Compass)</h3>
+          <p class="small">Get a recommended queue, probing questions, and internal note template (Always review before using).</p>
+          <button class="btn" onclick="go('cav')">Open</button>
+        </div>
+        <div class="panel" style="margin:0">
+          <h3>📚 KB Search (Excel + PDF)</h3>
+          <p class="small">Opens your existing search (tmc_user_g). You can keep using the public cache link.</p>
+          <a id="kbLink" class="btn ghost" href="#" target="_blank">Open KB Search</a>
+          <div class="small" style="margin-top:6px">Admin can set: <code>localStorage.setItem('tmc_kb_url','...')</code></div>
+        </div>
+        <div class="panel" style="margin:0">
+          <h3>💬 Probing Question Banks</h3>
+          <p class="small">Module-specific questions to qualify issues quickly. (Always review before using)</p>
+          <button class="btn secondary" onclick="go('probing')">Browse</button>
+        </div>
+        <div class="panel" style="margin:0">
+          <h3>📝 Internal Notes Formatter</h3>
+          <p class="small">Generate clean, consistent internal notes ready to paste into your case. (Always review before using)</p>
+          <button class="btn secondary" onclick="go('notes')">Use formatter</button>
+        </div>
+      </div>
     </div>
-    <div class="title">CASE TRIAGE CONSOLE</div>
-    <span class="badge">Home</span>
-    <div style="margin-left:auto" class="small">Dayforce blue — bright header & buttons, readable dark UI</div>
-  </header>
-  <div class="brand-hero">Point every case to the best path.</div>
 
-  <section class="main">
-    <aside class="sidebar">
-      <button class="menuBtn active" data-view="home">🏠 Home</button>
-      <button class="menuBtn" data-view="cav">🧭 Correct Routing (Queue Compass)</button>
-      <button class="menuBtn" data-view="probing">💬 Probing Questions</button>
-      <button class="menuBtn" data-view="notes">📝 Internal Notes</button>
-      <button class="menuBtn" data-view="kb">📚 KB Search</button>
-      <button class="menuBtn" data-view="feedback">💡 Feedback</button>
-      <div class="panel small" style="margin-top:8px">
-        This page is static. Admins configure external endpoints (KB cache, feedback embeds, optional AI endpoint) via <code>localStorage</code>. Users do not sign in.
-      </div>
-    </aside>
-
-    <main class="content">
-      <!-- HOME -->
-      <div id="view-home" class="panel">
-        <h2 style="margin:6px 0 10px 0">Welcome, Triage Team! 👋</h2>
-        <div class="notice">Always review internal notes and probing QQs suggestions before sending to client.</div>
-        <p style="margin:10px 0 0 0">Pick a workflow to get started.</p>
-
-        <div class="twoCol" style="margin-top:12px">
-          <div class="panel" style="margin:0">
-            <h3>🧭 Correct Routing (Queue Compass)</h3>
-            <p class="small">Get a recommended queue, probing questions, and internal note template (Always review before using).</p>
-            <button class="btn" onclick="go('cav')">Open</button>
+    <!-- ROUTING (exists so JS doesn't fail) -->
+    <div id="view-cav" class="panel" style="display:none">
+      <h2>🧭 Correct Routing (Queue Compass)</h2>
+      <div class="twoCol">
+        <div class="panel" style="margin:0">
+          <h3>Describe the case</h3>
+          <div class="row">
+            <div style="flex:1">
+              <label class="small">Module</label><br>
+              <select id="modSelect" class="input"></select>
+            </div>
+            <div style="width:160px">
+              <label class="small">Urgency</label><br>
+              <select id="urgency" class="input">
+                <option value="normal">Normal</option>
+                <option value="high">High</option>
+                <option value="critical">Critical</option>
+              </select>
+            </div>
           </div>
-          <div class="panel" style="margin:0">
-            <h3>📚 KB Search (Excel + PDF)</h3>
-            <p class="small">Opens your existing search (tmc_user_g). You can keep using the public cache link.</p>
-            <a id="kbLink" class="btn ghost" href="#" target="_blank">Open KB Search</a>
-            <div class="hint">Admin can set: <code>localStorage.setItem('tmc_kb_url','...')</code></div>
-          </div>
-          <div class="panel" style="margin:0">
-            <h3>💬 Probing Question Banks</h3>
-            <p class="small">Module-specific questions to qualify issues quickly. (Always review before using)</p>
-            <button class="btn secondary" onclick="go('probing')">Browse</button>
-          </div>
-          <div class="panel" style="margin:0">
-            <h3>📝 Internal Notes Formatter</h3>
-            <p class="small">Generate clean, consistent internal notes ready to paste into your case. (Always review before using)</p>
-            <button class="btn secondary" onclick="go('notes')">Use formatter</button>
+          <label class="small" style="display:block;margin-top:8px">Issue summary</label>
+          <textarea id="summary" placeholder="e.g., Candidate invite emails aren’t going out after interview is scheduled."></textarea>
+          <div class="small" style="margin-top:8px">Common symptoms (optional)</div>
+          <div id="symptoms" class="row" style="margin-top:4px"></div>
+          <div class="row" style="margin-top:10px">
+            <button class="btn" onclick="suggestRoute()">Suggest queue</button>
+            <button class="btn" onclick="generateProbes()">AI: Suggest probing questions</button>
+            <button class="btn ghost" onclick="clearCav()">Clear</button>
           </div>
         </div>
-      </div>
-
-      <!-- CAV ROUTING -->
-      <div id="view-cav" class="panel" style="display:none">
-        <h2 style="margin:6px 0 10px 0">🧭 Correct Routing (Queue Compass)</h2>
-        <div class="twoCol">
-          <div class="panel" style="margin:0">
-            <h3>Describe the case</h3>
-            <div class="row">
-              <div style="flex:1">
-                <label class="small">Module</label><br>
-                <select id="modSelect" class="input"></select>
-              </div>
-              <div style="width:160px">
-                <label class="small">Urgency</label><br>
-                <select id="urgency" class="input">
-                  <option value="normal">Normal</option>
-                  <option value="high">High</option>
-                  <option value="critical">Critical</option>
-                </select>
-              </div>
-            </div>
-            <label class="small" style="display:block;margin-top:8px">Issue summary</label>
-            <textarea id="summary" placeholder="e.g., Candidate invite emails aren’t going out after interview is scheduled."></textarea>
-
-            <div class="small" style="margin-top:8px">Common symptoms (optional)</div>
-            <div id="symptoms" class="row" style="margin-top:4px"></div>
-
-            <div class="row" style="margin-top:10px">
-              <button class="btn" onclick="suggestRoute()">Suggest queue</button>
-              <button class="btn" onclick="generateProbes()">AI: Suggest probing questions</button>
-              <button class="btn ghost" onclick="clearCav()">Clear</button>
-              <button class="btn secondary" onclick="downloadCsvTemplate()">Download CSV template</button>
-              <label class="btn ghost" style="cursor:pointer">
-                Import rules (CSV)
-                <input id="csvInput" type="file" accept=".csv" style="display:none" />
-              </label>
-            </div>
-            <div class="hint">Rules are scored by module match + keyword hits. Import a CSV exported from Excel to update.</div>
-          </div>
-
-          <div class="panel" style="margin:0">
-            <h3>Recommendation</h3>
-            <div id="routeBox" class="small" style="opacity:.9">Fill the form and click <em>Suggest queue</em>.</div>
-            <div id="altBox" class="small" style="margin-top:8px"></div>
-
-            <h3 style="margin-top:12px">Probing questions</h3>
-            <ul id="probeList" class="small"></ul>
-
-            <h3 style="margin-top:12px">AI probing suggestions</h3>
-            <ul id="aiProbeList" class="small"></ul>
-            <div id="aiProbeMeta" class="small" style="opacity:.85;margin-top:6px"></div>
-
-            <h3 style="margin-top:12px">Internal notes</h3>
-            <textarea id="notesOut" placeholder="[Copyable] Internal notes will appear here…" style="min-height:120px"></textarea>
-            <div class="row" style="margin-top:8px">
-              <button class="btn ok" onclick="copyNotes()">Copy notes</button>
-            </div>
-          </div>
+        <div class="panel" style="margin:0">
+          <h3>Recommendation</h3>
+          <div id="routeBox" class="small" style="opacity:.9">Fill the form and click <em>Suggest queue</em>.</div>
+          <div id="altBox" class="small" style="margin-top:8px"></div>
+          <h3 style="margin-top:12px">Probing questions</h3>
+          <ul id="probeList" class="small"></ul>
+          <h3 style="margin-top:12px">AI probing suggestions</h3>
+          <ul id="aiProbeList" class="small"></ul>
+          <div id="aiProbeMeta" class="small" style="opacity:.85;margin-top:6px"></div>
         </div>
       </div>
+    </div>
 
-      <!-- FEEDBACK (Microsoft Forms + Excel embed) -->
-      <div id="view-feedback" class="panel" style="display:none">
-        <h2>💡 Feedback & Ideas</h2>
-        <div class="notice">No PII or client-identifying info. Be concise.</div>
-        <div class="twoCol" style="margin-top:10px">
-          <div class="panel" style="margin:0">
-            <h3>Submit (Microsoft Forms)</h3>
-            <div id="fbFormWrap" class="iframeBox">
-              <div class="hint" id="fbFormHint">
-                Admin: set your Form embed <em>src</em> once (no code change):
-                <pre style="white-space:pre-wrap;margin:6px 0 0 0;">localStorage.setItem('tmc_form_iframe','https://forms.office.com/Pages/ResponsePage.aspx?...&amp;embed=true')</pre>
-              </div>
-            </div>
-          </div>
-          <div class="panel" style="margin:0">
-            <h3>Recent feedback (Excel responses)</h3>
-            <div id="fbSheetWrap" class="iframeBox">
-              <div class="hint" id="fbSheetHint">
-                Admin: set your Excel embed <em>src</em> once:
-                <pre style="white-space:pre-wrap;margin:6px 0 0 0;">localStorage.setItem('tmc_feedback_embed','https://onedrive.live.com/embed?resid=...&amp;em=2')</pre>
-                Tip: use “Embed” from OneDrive/Excel Online (workbook set to “Anyone can view”).
-              </div>
-            </div>
-          </div>
-        </div>
-      </div>
-
-      <!-- PROBING BANK + GENERATE -->
-      <div id="view-probing" class="panel" style="display:none">
-        <h2>💬 Probing Question Banks</h2>
-
-        <div class="twoCol" style="margin-top:10px">
-          <!-- Left: browse/import curated bank -->
-          <div class="panel" style="margin:0">
-            <h3>Browse bank</h3>
-            <div class="row">
-              <div style="flex:1">
-                <label class="small">Module</label><br>
-                <select id="pbModule" class="input"></select>
-              </div>
-              <div style="flex:2">
-                <label class="small">Filter (tags / text)</label><br>
-                <input id="pbFilter" class="input" placeholder="e.g., schedule, import, matrix" oninput="renderProbeBank()">
-              </div>
-            </div>
-
-            <ol id="bankList" class="small" style="margin-top:10px"></ol>
-
-            <div class="row" style="margin-top:10px">
-              <button class="btn" onclick="downloadProbeCsvTemplate()">Download sample CSV</button>
-              <label class="btn ghost" style="cursor:pointer">
-                Import CSV
-                <input id="pbCsv" type="file" accept=".csv" style="display:none">
-              </label>
-              <button class="btn secondary" onclick="copyBank()">Copy visible</button>
-            </div>
-            <div class="hint">CSV columns: <code>Module,Question,Tags</code>. Tags are optional (comma-separated).</div>
-          </div>
-
-          <!-- Right: generate (lite) + optional AI endpoint if configured -->
-          <div class="panel" style="margin:0">
-            <h3>Generate suggestions</h3>
-            <div class="row">
-              <div style="flex:1">
-                <label class="small">Module</label><br>
-                <select id="pbGenModule" class="input"></select>
-              </div>
-            </div>
-            <label class="small" style="display:block;margin-top:8px">Issue summary or keywords</label>
-            <textarea id="pbGenText" placeholder="e.g., interview invites not sending after scheduling"></textarea>
-
-            <div class="row" style="margin-top:10px">
-              <button class="btn" onclick="pbGenerate()">Generate (lite)</button>
-              <button class="btn ghost" onclick="generateProbes(true)">AI (auto-fallback)</button>
-              <button class="btn secondary" onclick="copyPb()">Copy generated</button>
-            </div>
-
-            <ul id="pbGenList" class="small" style="margin-top:10px"></ul>
-            <div id="pbGenMeta" class="small" style="opacity:.85;margin-top:6px"></div>
-
-            <div class="hint" style="margin-top:8px">
-              Tip: if you’ve published a KB/PDF cache JSON, set it once so suggestions use it:
-              <code>localStorage.setItem('tmc_kb_cache_url','https://.../cache.json')</code>
-            </div>
-          </div>
-        </div>
-      </div>
-
-      <!-- PLACEHOLDERS -->
-      <div id="view-notes" class="panel" style="display:none">
-        <h2>📝 Internal Notes</h2>
-        <p class="small">Coming soon — quick formatter with placeholders (Client, Case ID, steps taken, artifacts, result).</p>
-      </div>
-      <div id="view-kb" class="panel" style="display:none">
-        <h2>📚 KB Search</h2>
-        <p class="small">Use the Home tile to open your existing tmc_user_g search. Admin can store a direct link via <code>localStorage</code>.</p>
-      </div>
-    </main>
-  </section>
-
-  <footer class="small">© TMCoach — For internal enablement. <span class="badge">No PII</span></footer>
+    <!-- PROBING + FEEDBACK placeholders (so JS is safe even if not used) -->
+    <div id="view-probing" class="panel" style="display:none">
+      <h2>💬 Probing Question Banks</h2>
+      <div class="small">Coming soon — module banks, CSV import, and AI suggestions.</div>
+      <div class="row" style="margin-top:10px"><button class="btn ghost" onclick="go('home')">Back</button></div>
+    </div>
+    <div id="view-notes" class="panel" style="display:none"><h2>📝 Internal Notes</h2><p class="small">Coming soon.</p></div>
+    <div id="view-kb" class="panel" style="display:none"><h2>📚 KB Search</h2><p class="small">Use the Home tile to open your KB search.</p></div>
+    <div id="view-feedback" class="panel" style="display:none"><h2>💡 Feedback</h2><p class="small">Coming soon.</p></div>
+  </main>
+</section>
 
 <script>
-/* ========= Config from localStorage (set by admin once) ========= */
-const KB_URL        = localStorage.getItem('tmc_kb_url')        || '';
-const FORM_IFRAME   = localStorage.getItem('tmc_form_iframe')   || '';
-const SHEET_EMBED   = localStorage.getItem('tmc_feedback_embed')|| '';
+// ---- safe helpers ----
+function el(id){ return document.getElementById(id); }
+function on(q,ev,fn){ const n=document.querySelector(q); if(n) n.addEventListener(ev,fn); }
 
-/* ========= Nav ========= */
+// ---- nav ----
 function go(view){
   document.querySelectorAll('.menuBtn').forEach(b=>b.classList.toggle('active', b.dataset.view===view || (view==='home'&&b.dataset.view==='home')));
-  ['home','cav','probing','notes','kb','feedback'].forEach(v=>{
-    document.getElementById('view-'+v).style.display = (v===view?'block':'none');
-  });
+  ['home','cav','probing','notes','kb','feedback'].forEach(v=>{ const pane = el('view-'+v); if(pane) pane.style.display = (v===view?'block':'none'); });
 }
-document.querySelectorAll('.menuBtn').forEach(b=>b.onclick=()=>go(b.dataset.view));
+document.querySelectorAll('.menuBtn').forEach(b=>b.addEventListener('click', ()=>go(b.dataset.view)));
 
-/* ========= KB link ========= */
-(function initKbLink(){
-  const a = document.getElementById('kbLink');
-  if(KB_URL){ a.href = KB_URL; a.textContent='Open KB Search'; }
-  else { a.href = 'tmc_user_g.html'; }
-})();
+// ---- KB link (defensive) ----
+(function(){ const a = el('kbLink'); const url = localStorage.getItem('tmc_kb_url')||''; if(a){ a.href = url || 'tmc_user_g.html'; } })();
 
-/* ========= Sample routing rules (override by CSV import) ========= */
-let routingRules = [
-  { module:'Recruiting', signals:['interview','schedule','calendar','invite','slot','availability','panel','hireright','screening'], queue:'Recruiting > Interview Scheduling', confidenceBase:0.75,
-    probing:['Which job requisition?','Which candidate(s)?','Which interviewer(s)?','Is calendar provider O365/Google and connected?','Exact error, if any.'],
-    notes:'Module: Recruiting | Topic: Interview Scheduling\\nSummary: {summary}\\nQueue: Recruiting > Interview Scheduling\\nInfo collected: {answers}\\nLinks: {link1}',
-    pdfLabel:'RecruitingGuide', pdfLink:'https://help.dayforce.com/', pdfPage:158 },
-  { module:'Recruiting', signals:['import','candidate','csv','workbench','bulk','upload'], queue:'Recruiting > Data Imports', confidenceBase:0.72,
-    probing:['Import source (CSV/API)?','Sample file received?','Target fields mapped?','Any rows rejected?'],
-    notes:'Module: Recruiting | Topic: Candidate Import\\nSummary: {summary}\\nQueue: Recruiting > Data Imports\\nInfo collected: {answers}\\nLinks: {link1}',
-    pdfLabel:'RecruitingGuide', pdfLink:'https://help.dayforce.com/', pdfPage:421 },
-  { module:'Compensation', signals:['merit','matrix','guidelines','performance','pay grade','comp'], queue:'Compensation > Merit', confidenceBase:0.73,
-    probing:['Which cycle (year)?','How many employees impacted?','Matrix config changed recently?','Any custom guidelines?'],
-    notes:'Module: Compensation | Topic: Merit Matrix\\nSummary: {summary}\\nQueue: Compensation > Merit\\nInfo collected: {answers}\\nLinks: {link1}',
-    pdfLabel:'CompensationGuide', pdfLink:'https://help.dayforce.com/', pdfPage:159 },
-  { module:'Payroll', signals:['earnings','deductions','options tab','calc','tax','payroll'], queue:'Payroll > Earnings & Deductions', confidenceBase:0.7,
-    probing:['Pay group / pay period?','Specific earning/deduction code(s)?','Expected vs actual calculation?','Recent config changes?'],
-    notes:'Module: Payroll | Topic: Earnings & Deductions\\nSummary: {summary}\\nQueue: Payroll > Earnings & Deductions\\nInfo collected: {answers}\\nLinks: {link1}',
-    pdfLabel:'PayrollGuide', pdfLink:'https://help.dayforce.com/', pdfPage:342 },
-  { module:'Time', signals:['clock','time','meal break','premium','rule','punch'], queue:'Time > Rules', confidenceBase:0.68,
-    probing:['Site/branch?','Rule name & version?','Who is affected?','Exact punches/timeframe?'],
-    notes:'Module: Time | Topic: Meal Break / Clock Rules\\nSummary: {summary}\\nQueue: Time > Rules\\nInfo collected: {answers}\\nLinks: {link1}',
-    pdfLabel:'TimeGuide', pdfLink:'https://help.dayforce.com/', pdfPage:201 },
-  { module:'Learning', signals:['enroll','learning plan','rules','course','assignment'], queue:'Learning > Configuration', confidenceBase:0.66,
-    probing:['Which courses/plans?','Enrollment criteria?','Specific users or groups?','Expected vs actual behavior?'],
-    notes:'Module: Learning | Topic: Enrollment Rules\\nSummary: {summary}\\nQueue: Learning > Configuration\\nInfo collected: {answers}\\nLinks: {link1}',
-    pdfLabel:'LearningGuide', pdfLink:'https://help.dayforce.com/', pdfPage:135 }
-];
+// ---- minimal routing demo (defensive) ----
+const routingRules=[{module:'Recruiting',signals:['interview','schedule','calendar','invite'],queue:'Recruiting > Interview Scheduling',probing:['Which req?','Which candidate(s)?','Which interviewer(s)?','Connected calendar?']},
+                    {module:'Compensation',signals:['merit','matrix','guidelines'],queue:'Compensation > Merit',probing:['Which cycle?','How many impacted?']}];
 
-const modules = [...new Set(routingRules.map(r=>r.module))].sort();
-const symptomBank = ['Access/Permissions','Configuration','Integration/API','Data Issue','Bug/Unexpected','How-to/Training'];
-
-/* ========= Populate CAV UI ========= */
 (function initCAV(){
-  const modSel = document.getElementById('modSelect');
-  modules.forEach(m=>{ const o=document.createElement('option'); o.value=m; o.textContent=m; modSel.appendChild(o); });
-  const symWrap = document.getElementById('symptoms');
-  symptomBank.forEach(s=>{
-    const b=document.createElement('button'); b.className='kpill'; b.type='button'; b.textContent=s;
-    b.onclick=()=>b.classList.toggle('active');
-    symWrap.appendChild(b);
+  const modSel = el('modSelect'); const symWrap = el('symptoms');
+  if(!modSel || !symWrap) return; // if section not present, do nothing
+  [...new Set(routingRules.map(r=>r.module))].forEach(m=>{ const o=document.createElement('option'); o.value=m; o.textContent=m; modSel.appendChild(o); });
+  ['Access/Permissions','Configuration','Integration/API','Data Issue','Bug/Unexpected','How-to/Training'].forEach(s=>{
+    const b=document.createElement('button'); b.className='menuBtn'; b.style.width='auto'; b.textContent=s; b.onclick=()=>b.classList.toggle('active'); symWrap.appendChild(b);
   });
 })();
 
-/* ========= CAV scoring ========= */
-function tmc_tokenize(s){ return (s||'').toLowerCase().split(/[^a-z0-9]+/).filter(Boolean); }
-function tmc_jacc(a,b){ const A=new Set(tmc_tokenize(a)), B=new Set(tmc_tokenize(b)); const inter=[...A].filter(x=>B.has(x)).length, uni=new Set([...A,...B]).size; return uni? inter/uni : 0; }
-
-function scoreRule(rule, selectedModule, summaryTokens, symptomTags){
-  let score = 0;
-  if(rule.module.toLowerCase() === (selectedModule||'').toLowerCase()) score += 0.5;
-  const sig = (rule.signals||[]).map(x=>x.toLowerCase());
-  const hits = summaryTokens.filter(t=>sig.includes(t));
-  score += Math.min(0.4, hits.length * 0.07);
-  if(symptomTags.some(t => rule.signals.join(' ').toLowerCase().includes(t.toLowerCase()))) score += 0.1;
-  score += (rule.confidenceBase||0);
-  return {score, hits};
-}
-
+function tokenize(s){ return (s||'').toLowerCase().split(/[^a-z0-9]+/).filter(Boolean); }
 function suggestRoute(){
-  const mod = document.getElementById('modSelect').value;
-  const urg = document.getElementById('urgency').value;
-  const summary = document.getElementById('summary').value.trim();
-  const sym = [...document.querySelectorAll('#symptoms .kpill.active')].map(x=>x.textContent);
+  const modSel = el('modSelect'), sum = el('summary'), ul = el('probeList'), box = el('routeBox');
+  if(!modSel || !sum || !ul || !box) return;
+  const mod = modSel.value, summary = (sum.value||'').trim();
   if(!summary){ alert('Please enter an issue summary.'); return; }
-
-  const toks = tmc_tokenize(summary);
-  const scored = routingRules.map(r => ({ rule:r, ...scoreRule(r,mod,toks,sym) })).sort((a,b)=>b.score-a.score);
-  const top = scored[0];
-  const alts = scored.slice(1,4);
-
-  if(!top){ document.getElementById('routeBox').innerHTML = 'No matching rule yet. Try adding more detail.'; return; }
-
-  const confPct = Math.min(99, Math.round(top.score*100));
-  let routeHTML = `<div class="notice" style="border-color:#2a4fa2">Recommended queue: <strong>${top.rule.queue}</strong> <span class="badge" style="margin-left:8px">${confPct}%</span></div>`;
-  const why = top.hits.length ? `Matched keywords: `+top.hits.map(h=>`<span class="kpill">${h}</span>`).join(' ') : 'Based on module & historical signals.';
-  routeHTML += `<div class="small" style="margin-top:6px">${why}</div>`;
-  if(top.rule.pdfLink){ routeHTML += `<div class="small" style="margin-top:6px">Link: <a href="${top.rule.pdfLink}#page=${top.rule.pdfPage||1}" target="_blank">${top.rule.pdfLabel||'Guide'} p.${top.rule.pdfPage||'?'}</a></div>`; }
-  document.getElementById('routeBox').innerHTML = routeHTML;
-
-  const ul=document.getElementById('probeList'); ul.innerHTML='';
-  (top.rule.probing||[]).forEach(q=>{ const li=document.createElement('li'); li.textContent=q; ul.appendChild(li); });
-
-  const answersHint = (top.rule.probing||[]).map(q=>`- ${q}`).join('\\n');
-  const notes = (top.rule.notes||'').replace('{summary}', summary).replace('{answers}', answersHint).replace('{link1}', top.rule.pdfLink||'');
-  document.getElementById('notesOut').value = notes;
-
-  const altDiv=document.getElementById('altBox'); altDiv.innerHTML='';
-  if(alts.length){
-    let s='<div class="small"><strong>Other possible queues</strong></div><table class="table small"><tr><th>Queue</th><th>Why</th><th>Score</th></tr>';
-    alts.forEach(a=>{
-      const whyA = a.hits.length? a.hits.join(', ') : 'Signals overlap';
-      s += `<tr><td>${a.rule.queue}</td><td>${whyA}</td><td>${Math.round(a.score*100)}%</td></tr>`;
-    });
-    s+='</table>'; altDiv.innerHTML=s;
-  }
+  const toks = tokenize(summary);
+  const scored = routingRules.map(r=>({r, s: (r.module===mod?0.5:0)+toks.filter(t=>r.signals.includes(t)).length*0.1})).sort((a,b)=>b.s-a.s);
+  const top = scored[0]?.r;
+  if(!top){ box.textContent='No suggestion.'; return; }
+  box.innerHTML = `Recommended queue: <strong>${top.queue}</strong>`;
+  ul.innerHTML=''; (top.probing||[]).forEach(q=>{ const li=document.createElement('li'); li.textContent=q; ul.appendChild(li); });
 }
+function clearCav(){ if(el('summary')) el('summary').value=''; if(el('probeList')) el('probeList').innerHTML=''; if(el('routeBox')) el('routeBox').textContent='Fill the form and click Suggest queue.'; }
 
-function clearCav(){
-  document.getElementById('summary').value='';
-  document.querySelectorAll('#symptoms .kpill.active').forEach(x=>x.classList.remove('active'));
-  document.getElementById('routeBox').innerHTML='Fill the form and click <em>Suggest queue</em>.';
-  document.getElementById('altBox').innerHTML='';
-  document.getElementById('probeList').innerHTML='';
-  document.getElementById('notesOut').value='';
-}
-function copyNotes(){ const el=document.getElementById('notesOut'); if(!el.value) return; el.select(); document.execCommand('copy'); el.blur(); }
-
-/* ========= CSV Template & Import for routing rules ========= */
-function downloadCsvTemplate(){
-  const csv = [
-    'Module,Signals,Queue,Probing,NotesTemplate,PDFLabel,PDFLink,PDFPage',
-    'Recruiting,"interview,schedule,calendar,invite,slot,availability,panel,hireright,screening","Recruiting > Interview Scheduling","Which job requisition?;Which candidate(s)?;Which interviewer(s)?;Is calendar provider O365/Google and connected?;Exact error, if any.","Module: Recruiting | Topic: Interview Scheduling\\nSummary: {summary}\\nQueue: Recruiting > Interview Scheduling\\nInfo collected: {answers}\\nLinks: {link1}",RecruitingGuide,https://help.dayforce.com/,158',
-    'Recruiting,"import,candidate,csv,workbench,bulk,upload","Recruiting > Data Imports","Import source (CSV/API)?;Sample file received?;Target fields mapped?;Any rows rejected?","Module: Recruiting | Topic: Candidate Import\\nSummary: {summary}\\nQueue: Recruiting > Data Imports\\nInfo collected: {answers}\\nLinks: {link1}",RecruitingGuide,https://help.dayforce.com/,421'
-  ].join('\\n');
-  const blob = new Blob([csv], {type:'text/csv;charset=utf-8;'}); const url = URL.createObjectURL(blob);
-  const a = document.createElement('a'); a.href=url; a.download='tmc_routing_template.csv'; document.body.appendChild(a); a.click(); document.body.removeChild(a);
-  setTimeout(()=>URL.revokeObjectURL(url), 1200);
-}
-document.getElementById('csvInput')?.addEventListener('change', async (e)=>{
-  const f=e.target.files?.[0]; if(!f) return;
-  const text = await f.text();
-  const rows = text.split(/\\r?\\n/).filter(Boolean).map(r=>r.split(/,(?=(?:[^"]*"[^"]*")*[^"]*$)/).map(x=>x.replace(/^"+|"+$/g,'')));
-  const head = rows.shift().map(h=>h.trim().toLowerCase());
-  const idx = (h)=>head.indexOf(h);
-  const list = rows.map(r=>({
-    module: r[idx('module')]||'',
-    signals: (r[idx('signals')]||'').split(/\\s*,\\s*/).filter(Boolean),
-    queue: r[idx('queue')]||'',
-    probing: (r[idx('probing')]||'').split(/\\s*;\\s*/).filter(Boolean),
-    notes: r[idx('notestemplate')]||'',
-    pdfLabel: r[idx('pdflabel')]||'',
-    pdfLink: r[idx('pdflink')]||'',
-    pdfPage: parseInt(r[idx('pdfpage')])||1,
-    confidenceBase: 0.7
-  })).filter(x=>x.module && x.queue);
-  if(!list.length){ alert('No valid rows found in CSV.'); return; }
-  routingRules = list;
-  const modSel=document.getElementById('modSelect'); modSel.innerHTML='';
-  [...new Set(routingRules.map(r=>r.module))].sort().forEach(m=>{ const o=document.createElement('option'); o.value=m; o.textContent=m; modSel.appendChild(o); });
-  alert('Imported '+list.length+' rules.');
-});
-
-/* ========= Feedback embeds (Forms + Excel) ========= */
-(function renderFeedbackEmbeds(){
-  const formWrap  = document.getElementById('fbFormWrap');
-  const sheetWrap = document.getElementById('fbSheetWrap');
-
-  if (FORM_IFRAME && formWrap){
-    document.getElementById('fbFormHint')?.remove();
-    const f = document.createElement('iframe');
-    f.src = FORM_IFRAME; f.title = 'Feedback form';
-    formWrap.appendChild(f);
-  }
-  if (SHEET_EMBED && sheetWrap){
-    document.getElementById('fbSheetHint')?.remove();
-    const s = document.createElement('iframe');
-    s.src = SHEET_EMBED; s.title = 'Feedback list';
-    sheetWrap.appendChild(s);
-  }
-})();
-
-/* ========= Probing Bank (no infra) ========= */
-let PROBE_BANK = [];
-function seedProbeBankFromRules(){
-  try{
-    PROBE_BANK = (window.routingRules || []).flatMap(r =>
-      (r.probing || []).map(q => ({ module:r.module, question:q, tags:(r.signals||[]) }))
-    );
-  }catch(e){ PROBE_BANK = []; }
-}
-(function loadSavedBank(){
-  try{
-    const raw = localStorage.getItem('tmc_probe_bank');
-    if(raw){ PROBE_BANK = JSON.parse(raw); }
-    else { seedProbeBankFromRules(); }
-  }catch(e){ seedProbeBankFromRules(); }
-})();
-function saveBank(){ try{ localStorage.setItem('tmc_probe_bank', JSON.stringify(PROBE_BANK)); }catch(e){} }
-
-(function initProbingUI(){
-  const modules = [...new Set((window.routingRules||[]).map(r=>r.module))].sort();
-  const pbModule = document.getElementById('pbModule');
-  const pbGenModule = document.getElementById('pbGenModule');
-  modules.forEach(m=>{
-    const o1=document.createElement('option'); o1.value=m; o1.textContent=m; pbModule.appendChild(o1);
-    const o2=document.createElement('option'); o2.value=m; o2.textContent=m; pbGenModule.appendChild(o2);
-  });
-  renderProbeBank();
-})();
-
-function renderProbeBank(){
-  const mod = document.getElementById('pbModule').value;
-  const q = (document.getElementById('pbFilter').value||'').toLowerCase();
-  const list = document.getElementById('bankList'); list.innerHTML='';
-  let rows = PROBE_BANK.filter(x => x.module===mod);
-  if(q){
-    rows = rows.filter(x => (x.question||'').toLowerCase().includes(q) ||
-      (x.tags||[]).some(t => (t||'').toLowerCase().includes(q)));
-  }
-  rows.slice(0,400).forEach(x=>{
-    const li = document.createElement('li'); li.textContent = x.question; list.appendChild(li);
-  });
-}
-function copyBank(){
-  const items = [...document.querySelectorAll('#bankList li')].map(li=>`- ${li.textContent}`);
-  if(!items.length) return;
-  navigator.clipboard.writeText(items.join('\\n'));
-}
-document.getElementById('pbCsv').addEventListener('change', async (e)=>{
-  const f = e.target.files?.[0]; if(!f) return;
-  const text = await f.text();
-  const rows = text.split(/\\r?\\n/).filter(Boolean).map(r => r.split(/,(?=(?:[^"]*"[^"]*")*[^"]*$)/).map(x=>x.replace(/^"+|"+$/g,'')));
-  const head = rows.shift().map(h=>h.trim().toLowerCase());
-  const idx = (h)=>head.indexOf(h);
-  const imported = rows.map(r=>({
-    module: r[idx('module')] || '',
-    question: r[idx('question')] || '',
-    tags: (r[idx('tags')]||'').split(/\\s*,\\s*/).filter(Boolean)
-  })).filter(x => x.module && x.question);
-  if(!imported.length){ alert('No valid rows found. Expect columns: Module,Question,Tags'); return; }
-  PROBE_BANK = PROBE_BANK.concat(imported);
-  saveBank(); renderProbeBank();
-  alert(`Imported ${imported.length} questions.`);
-});
-function downloadProbeCsvTemplate(){
-  const csv = [
-    'Module,Question,Tags',
-    'Recruiting,"Which job requisition and candidate(s) are impacted?","interview,schedule"',
-    'Compensation,"Which cycle and guidelines/matrix are in effect?","merit,matrix"',
-    'Payroll,"Which pay group/period and earning/deduction codes are affected?","earnings,deductions"'
-  ].join('\\n');
-  const blob = new Blob([csv], {type:'text/csv;charset=utf-8;'});
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement('a'); a.href=url; a.download='tmc_probe_template.csv';
-  document.body.appendChild(a); a.click(); document.body.removeChild(a);
-  setTimeout(()=>URL.revokeObjectURL(url),1200);
-}
-
-/* ===== Lite generator (no LLM) for Probing page ===== */
-async function pbGenerate(){
-  const mod = document.getElementById('pbGenModule').value;
-  const text = (document.getElementById('pbGenText').value||'').trim();
-  const out = document.getElementById('pbGenList');
-  const meta = document.getElementById('pbGenMeta');
-  if(!text){ alert('Enter a short issue summary.'); return; }
-  out.innerHTML = '<li>Generating from module + KB…</li>'; meta.textContent='';
-
-  let topSnips = [];
-  try{
-    const cacheUrl = localStorage.getItem('tmc_kb_cache_url') || '';
-    if(cacheUrl){
-      const r = await fetch(cacheUrl, {cache:'no-store'}); const data = await r.json();
-      const entries = data.entries || data.docs || []; // flexible field name
-      const scored = entries.map(e => ({ e, s: tmc_jacc(text, e.text||'') }))
-                            .sort((a,b)=>b.s-a.s).slice(0,4).map(x=>x.e);
-      topSnips = scored;
-    }
-  }catch(e){ /* ignore */ }
-
-  const signals = (window.routingRules||[])
-    .filter(r => r.module===mod)
-    .flatMap(r => r.signals||[])
-    .slice(0,12);
-
-  const terms = [...new Set(tmc_tokenize(text).concat(signals).concat(
-    topSnips.flatMap(s => tmc_tokenize((s.text||'').slice(0,300)))
-  ))].slice(0,30);
-
-  const generic = [
-    `Scope & impact: which ${mod} entities/users/branches are affected? Any pattern or only certain groups?`,
-    `Repro: exact steps in ${mod} and expected vs actual results.`,
-    `Changes: any recent config, data import, integration, or permission updates before this started?`,
-    `Timeframe: when first noticed? Consistent or intermittent? Any specific dates/pay periods?`,
-    `Artifacts: screenshots/error text (no PII), job IDs, run logs.`,
-    `Variability: all records or those meeting specific criteria (filters, rules, eligibility)?`
-  ];
-  const focus = terms.slice(0,6).map(t => `Confirm how “${t}” is configured and whether it changed recently.`);
-  const questions = [...generic.slice(0,5), ...focus].slice(0,8);
-
-  out.innerHTML=''; questions.forEach(q=>{ const li=document.createElement('li'); li.textContent=q; out.appendChild(li); });
-
-  if(topSnips.length){
-    const cite = topSnips.map(s=>{
-      const tag = (s.label||s.source||'KB') + (s.page? ` p.${s.page}`:'');
-      return s.link ? `<a href="${s.link}#page=${s.page||1}" target="_blank">${tag}</a>` : tag;
-    }).join(' • ');
-    meta.innerHTML = `Based on module + signals${terms.length? ' + summary terms':''}${topSnips.length? ' + KB snippets':''}. ${cite}`;
-  }else{
-    meta.textContent = 'Based on module, signals, and your summary.';
-  }
-}
-function copyPb(){
-  const lines = [...document.querySelectorAll('#pbGenList li')].map(li=>`- ${li.textContent}`);
-  if(!lines.length) return;
-  navigator.clipboard.writeText(lines.join('\\n'));
-}
-
-/* ========= AI Probing (shared) — wrapper prefers LLM if configured ========= */
-async function generateProbes(fromProbingPage=false){
-  const hasLLM = !!localStorage.getItem('tmc_ai_url');
-  if (hasLLM) return generateAIProbesLLM(fromProbingPage);
-  return generateAIProbesLite(fromProbingPage);
-}
-function readContext(fromProbingPage){
-  if (!fromProbingPage){
-    return {
-      module: document.getElementById('modSelect')?.value || '',
-      summary: (document.getElementById('summary')?.value || '').trim(),
-      outListId: 'aiProbeList',
-      outMetaId: 'aiProbeMeta'
-    };
-  } else {
-    return {
-      module: document.getElementById('pbGenModule')?.value || '',
-      summary: (document.getElementById('pbGenText')?.value || '').trim(),
-      outListId: 'pbGenList',
-      outMetaId: 'pbGenMeta'
-    };
-  }
-}
-async function generateAIProbesLite(fromProbingPage=false){
-  const ctx = readContext(fromProbingPage);
-  const out = document.getElementById(ctx.outListId);
-  const meta = document.getElementById(ctx.outMetaId);
-  if(!ctx.summary){ alert('Please enter an issue summary first.'); return; }
-  out.innerHTML = '<li>Generating from module + KB…</li>'; meta.textContent='';
-
-  // 1) Try to use public KB/PDF cache (optional)
-  let topSnips = [];
-  try{
-    const cacheUrl = localStorage.getItem('tmc_kb_cache_url') || '';
-    if(cacheUrl){
-      const r = await fetch(cacheUrl, {cache:'no-store'}); const data = await r.json();
-      const entries = data.entries || data.docs || []; // accept either
-      const scored = entries.map(e => ({ e, s: tmc_jacc(ctx.summary, e.text||'') }))
-                            .sort((a,b)=>b.s-a.s).slice(0,4).map(x=>x.e);
-      topSnips = scored;
-    }
-  }catch(e){ /* ignore */ }
-
-  // 2) Pull signals from your routing rules (by module)
-  const signals = (window.routingRules||[])
-    .filter(r => r.module===ctx.module)
-    .flatMap(r => r.signals||[])
-    .slice(0,12);
-
-  // 3) Build questions (templates + context terms)
-  const terms = [...new Set(tmc_tokenize(ctx.summary)
-                .concat(signals)
-                .concat(topSnips.flatMap(s => tmc_tokenize((s.text||'').slice(0,300)))))]
-                .slice(0,30);
-
-  const generic = [
-    `Scope & impact: which ${ctx.module} entities/users/branches are affected? Any pattern or only certain groups?`,
-    `Repro: exact steps in ${ctx.module} and expected vs actual results.`,
-    `Changes: any recent config, data import, integration, or permission updates before this started?`,
-    `Timeframe: when first noticed? Consistent or intermittent? Any specific dates/pay periods?`,
-    `Artifacts: screenshots/error text (no PII), job IDs, run logs.`,
-    `Variability: all records or those meeting specific criteria (filters, rules, eligibility)?`
-  ];
-  const focus = terms.slice(0,6).map(t => `Confirm how “${t}” is configured and whether it changed recently.`);
-
-  const questions = [...generic.slice(0,5), ...focus].slice(0,8);
-  out.innerHTML=''; questions.forEach(q=>{ const li=document.createElement('li'); li.textContent=q; out.appendChild(li); });
-
-  if(topSnips.length){
-    const cite = topSnips.map(s=>{
-      const tag = (s.label||s.source||'KB') + (s.page? ` p.${s.page}`:'');
-      return s.link ? `<a href="${s.link}#page=${s.page||1}" target="_blank">${tag}</a>` : tag;
-    }).join(' • ');
-    meta.innerHTML = `Based on module + signals${terms.length? ' + summary terms':''}${topSnips.length? ' + KB snippets':''}. ${cite}`;
-  }else{
-    meta.textContent = 'Based on module, signals, and your summary.';
-  }
-}
-
-/* ---------- Optional: LLM version when a server endpoint is configured ---------- */
-async function generateAIProbesLLM(fromProbingPage=false){
-  const ctx = readContext(fromProbingPage);
-  const out = document.getElementById(ctx.outListId);
-  const meta = document.getElementById(ctx.outMetaId);
-  const aiURL = localStorage.getItem('tmc_ai_url') || '';
-  if(!aiURL){ return generateAIProbesLite(fromProbingPage); }
-  if(!ctx.summary){ alert('Please enter an issue summary first.'); return; }
-  out.innerHTML = '<li>Generating with AI…</li>'; meta.textContent='';
-
-  // same snippet retrieval as lite (for RAG)
-  let snippets = [];
-  try{
-    const cacheUrl = localStorage.getItem('tmc_kb_cache_url') || '';
-    if(cacheUrl){
-      const r = await fetch(cacheUrl, {cache:'no-store'}); const data = await r.json();
-      const entries = data.entries || data.docs || [];
-      const scored = entries.map(e => ({ e, s: tmc_jacc(ctx.summary, e.text||'') }))
-                            .sort((a,b)=>b.s-a.s).slice(0,5).map(x=>x.e);
-      snippets = scored.map(e => ({
-        text: (e.text||'').slice(0,600),
-        source: e.label || e.source || 'KB',
-        page: e.page || null,
-        link: e.link || null
-      }));
-    }
-  }catch(e){}
-
-  try{
-    const body = { module: ctx.module, summary: ctx.summary, snippets };
-    const r = await fetch(aiURL, { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(body) });
-    const outJson = await r.json();
-    const qs = outJson?.questions || [];
-    out.innerHTML = '';
-    if(!qs.length){ out.innerHTML='<li>AI did not return questions. Falling back…</li>'; return generateAIProbesLite(fromProbingPage); }
-    qs.forEach(q=>{ const li=document.createElement('li'); li.textContent=q; out.appendChild(li); });
-    const cites = (outJson.citations||[]).map(c => c.link ? `<a href="${c.link}#page=${c.page||1}" target="_blank">${c.source}${c.page?` p.${c.page}`:''}</a>` : `${c.source}${c.page?` p.${c.page}`:''}`).join(' • ');
-    meta.innerHTML = `${outJson.rationale ? (tmc_escape(outJson.rationale) + '<br>') : ''}${cites || ''}`;
-  }catch(e){
-    out.innerHTML='<li>AI request failed. Falling back…</li>';
-    return generateAIProbesLite(fromProbingPage);
-  }
-}
-function tmc_escape(s){ return (s||'').replace(/[&<>"']/g, m=>({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',\"'\":'&#39;' }[m])); }
-
-/* ========= Init ========= */
+// ---- init ----
 go('home');
 </script>
 </body>
