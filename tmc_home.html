@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>CASE TRIAGE CONSOLE — Home</title>
+<title>TALENT MODULE COACH — Home</title>
 <style>
 /* ===================== Dayforce Blue Theme ===================== */
 :root{
@@ -138,11 +138,11 @@ footer{padding:14px 20px;color:var(--muted)}
         <text x="18" y="50" font-size="48" font-weight="800" font-family="Inter, Segoe UI, Arial, sans-serif" fill="#fff">d</text>
       </svg>
     </div>
-    <div class="title">CASE TRIAGE CONSOLE</div>
+    <div class="title">TALENT MODULE COACH</div>
     <span class="badge">Home</span>
     <div style="margin-left:auto" class="small">Dayforce blue — bright header & buttons, readable dark UI</div>
   </header>
-  <div class="brand-hero">Point every case to the best path.</div>
+  <div class="brand-hero">Always review TMCoach’s suggestions and never enter PII.</div>
 
   <section class="main">
     <aside class="sidebar">
@@ -153,15 +153,15 @@ footer{padding:14px 20px;color:var(--muted)}
       <button class="menuBtn" data-view="kb">📚 KB Search</button>
       <button class="menuBtn" data-view="feedback">💡 Feedback</button>
       <div class="panel small" style="margin-top:8px">
-        This page is static. Admins configure external endpoints (KB cache, feedback embeds) via <code>localStorage</code>. Users do not sign in.
+        This page is static. Admins configure external endpoints (KB cache, feedback embeds, optional AI endpoint) via <code>localStorage</code>. Users do not sign in.
       </div>
     </aside>
 
     <main class="content">
       <!-- HOME -->
       <div id="view-home" class="panel">
-        <h2 style="margin:6px 0 10px 0">Welcome, Triage Team! 👋</h2>
-        <div class="notice">Point every case to the best path.</div>
+        <h2 style="margin:6px 0 10px 0">Welcome, Pod Leads 👋</h2>
+        <div class="notice">Always review TMCoach’s suggestions and never enter PII.</div>
         <p style="margin:10px 0 0 0">Pick a workflow to get started.</p>
 
         <div class="twoCol" style="margin-top:12px">
@@ -191,7 +191,7 @@ footer{padding:14px 20px;color:var(--muted)}
 
       <!-- CAV ROUTING -->
       <div id="view-cav" class="panel" style="display:none">
-        <h2 style="margin:6px 0 10px 0">🧭 Correct Routing (CAV Management)</h2>
+        <h2 style="margin:6px 0 10px 0">🧭 Correct Routing (Queue Compass)</h2>
         <div class="twoCol">
           <div class="panel" style="margin:0">
             <h3>Describe the case</h3>
@@ -217,6 +217,7 @@ footer{padding:14px 20px;color:var(--muted)}
 
             <div class="row" style="margin-top:10px">
               <button class="btn" onclick="suggestRoute()">Suggest queue</button>
+              <button class="btn" onclick="generateProbes()">AI: Suggest probing questions</button>
               <button class="btn ghost" onclick="clearCav()">Clear</button>
               <button class="btn secondary" onclick="downloadCsvTemplate()">Download CSV template</button>
               <label class="btn ghost" style="cursor:pointer">
@@ -234,6 +235,10 @@ footer{padding:14px 20px;color:var(--muted)}
 
             <h3 style="margin-top:12px">Probing questions</h3>
             <ul id="probeList" class="small"></ul>
+
+            <h3 style="margin-top:12px">AI probing suggestions</h3>
+            <ul id="aiProbeList" class="small"></ul>
+            <div id="aiProbeMeta" class="small" style="opacity:.85;margin-top:6px"></div>
 
             <h3 style="margin-top:12px">Internal notes</h3>
             <textarea id="notesOut" placeholder="[Copyable] Internal notes will appear here…" style="min-height:120px"></textarea>
@@ -271,11 +276,68 @@ footer{padding:14px 20px;color:var(--muted)}
         </div>
       </div>
 
-      <!-- PLACEHOLDERS -->
+      <!-- PROBING BANK + GENERATE -->
       <div id="view-probing" class="panel" style="display:none">
         <h2>💬 Probing Question Banks</h2>
-        <p class="small">Coming soon — you’ll also see questions when you use the CAV workflow.</p>
+
+        <div class="twoCol" style="margin-top:10px">
+          <!-- Left: browse/import curated bank -->
+          <div class="panel" style="margin:0">
+            <h3>Browse bank</h3>
+            <div class="row">
+              <div style="flex:1">
+                <label class="small">Module</label><br>
+                <select id="pbModule" class="input"></select>
+              </div>
+              <div style="flex:2">
+                <label class="small">Filter (tags / text)</label><br>
+                <input id="pbFilter" class="input" placeholder="e.g., schedule, import, matrix" oninput="renderProbeBank()">
+              </div>
+            </div>
+
+            <ol id="bankList" class="small" style="margin-top:10px"></ol>
+
+            <div class="row" style="margin-top:10px">
+              <button class="btn" onclick="downloadProbeCsvTemplate()">Download sample CSV</button>
+              <label class="btn ghost" style="cursor:pointer">
+                Import CSV
+                <input id="pbCsv" type="file" accept=".csv" style="display:none">
+              </label>
+              <button class="btn secondary" onclick="copyBank()">Copy visible</button>
+            </div>
+            <div class="hint">CSV columns: <code>Module,Question,Tags</code>. Tags are optional (comma-separated).</div>
+          </div>
+
+          <!-- Right: generate (lite) + optional AI endpoint if configured -->
+          <div class="panel" style="margin:0">
+            <h3>Generate suggestions</h3>
+            <div class="row">
+              <div style="flex:1">
+                <label class="small">Module</label><br>
+                <select id="pbGenModule" class="input"></select>
+              </div>
+            </div>
+            <label class="small" style="display:block;margin-top:8px">Issue summary or keywords</label>
+            <textarea id="pbGenText" placeholder="e.g., interview invites not sending after scheduling"></textarea>
+
+            <div class="row" style="margin-top:10px">
+              <button class="btn" onclick="pbGenerate()">Generate (lite)</button>
+              <button class="btn ghost" onclick="generateProbes(true)">AI (auto-fallback)</button>
+              <button class="btn secondary" onclick="copyPb()">Copy generated</button>
+            </div>
+
+            <ul id="pbGenList" class="small" style="margin-top:10px"></ul>
+            <div id="pbGenMeta" class="small" style="opacity:.85;margin-top:6px"></div>
+
+            <div class="hint" style="margin-top:8px">
+              Tip: if you’ve published a KB/PDF cache JSON, set it once so suggestions use it:
+              <code>localStorage.setItem('tmc_kb_cache_url','https://.../cache.json')</code>
+            </div>
+          </div>
+        </div>
       </div>
+
+      <!-- PLACEHOLDERS -->
       <div id="view-notes" class="panel" style="display:none">
         <h2>📝 Internal Notes</h2>
         <p class="small">Coming soon — quick formatter with placeholders (Client, Case ID, steps taken, artifacts, result).</p>
@@ -315,27 +377,27 @@ document.querySelectorAll('.menuBtn').forEach(b=>b.onclick=()=>go(b.dataset.view
 let routingRules = [
   { module:'Recruiting', signals:['interview','schedule','calendar','invite','slot','availability','panel','hireright','screening'], queue:'Recruiting > Interview Scheduling', confidenceBase:0.75,
     probing:['Which job requisition?','Which candidate(s)?','Which interviewer(s)?','Is calendar provider O365/Google and connected?','Exact error, if any.'],
-    notes:'Module: Recruiting | Topic: Interview Scheduling\nSummary: {summary}\nQueue: Recruiting > Interview Scheduling\nInfo collected: {answers}\nLinks: {link1}',
+    notes:'Module: Recruiting | Topic: Interview Scheduling\\nSummary: {summary}\\nQueue: Recruiting > Interview Scheduling\\nInfo collected: {answers}\\nLinks: {link1}',
     pdfLabel:'RecruitingGuide', pdfLink:'https://help.dayforce.com/', pdfPage:158 },
   { module:'Recruiting', signals:['import','candidate','csv','workbench','bulk','upload'], queue:'Recruiting > Data Imports', confidenceBase:0.72,
     probing:['Import source (CSV/API)?','Sample file received?','Target fields mapped?','Any rows rejected?'],
-    notes:'Module: Recruiting | Topic: Candidate Import\nSummary: {summary}\nQueue: Recruiting > Data Imports\nInfo collected: {answers}\nLinks: {link1}',
+    notes:'Module: Recruiting | Topic: Candidate Import\\nSummary: {summary}\\nQueue: Recruiting > Data Imports\\nInfo collected: {answers}\\nLinks: {link1}',
     pdfLabel:'RecruitingGuide', pdfLink:'https://help.dayforce.com/', pdfPage:421 },
   { module:'Compensation', signals:['merit','matrix','guidelines','performance','pay grade','comp'], queue:'Compensation > Merit', confidenceBase:0.73,
     probing:['Which cycle (year)?','How many employees impacted?','Matrix config changed recently?','Any custom guidelines?'],
-    notes:'Module: Compensation | Topic: Merit Matrix\nSummary: {summary}\nQueue: Compensation > Merit\nInfo collected: {answers}\nLinks: {link1}',
+    notes:'Module: Compensation | Topic: Merit Matrix\\nSummary: {summary}\\nQueue: Compensation > Merit\\nInfo collected: {answers}\\nLinks: {link1}',
     pdfLabel:'CompensationGuide', pdfLink:'https://help.dayforce.com/', pdfPage:159 },
   { module:'Payroll', signals:['earnings','deductions','options tab','calc','tax','payroll'], queue:'Payroll > Earnings & Deductions', confidenceBase:0.7,
     probing:['Pay group / pay period?','Specific earning/deduction code(s)?','Expected vs actual calculation?','Recent config changes?'],
-    notes:'Module: Payroll | Topic: Earnings & Deductions\nSummary: {summary}\nQueue: Payroll > Earnings & Deductions\nInfo collected: {answers}\nLinks: {link1}',
+    notes:'Module: Payroll | Topic: Earnings & Deductions\\nSummary: {summary}\\nQueue: Payroll > Earnings & Deductions\\nInfo collected: {answers}\\nLinks: {link1}',
     pdfLabel:'PayrollGuide', pdfLink:'https://help.dayforce.com/', pdfPage:342 },
   { module:'Time', signals:['clock','time','meal break','premium','rule','punch'], queue:'Time > Rules', confidenceBase:0.68,
     probing:['Site/branch?','Rule name & version?','Who is affected?','Exact punches/timeframe?'],
-    notes:'Module: Time | Topic: Meal Break / Clock Rules\nSummary: {summary}\nQueue: Time > Rules\nInfo collected: {answers}\nLinks: {link1}',
+    notes:'Module: Time | Topic: Meal Break / Clock Rules\\nSummary: {summary}\\nQueue: Time > Rules\\nInfo collected: {answers}\\nLinks: {link1}',
     pdfLabel:'TimeGuide', pdfLink:'https://help.dayforce.com/', pdfPage:201 },
   { module:'Learning', signals:['enroll','learning plan','rules','course','assignment'], queue:'Learning > Configuration', confidenceBase:0.66,
     probing:['Which courses/plans?','Enrollment criteria?','Specific users or groups?','Expected vs actual behavior?'],
-    notes:'Module: Learning | Topic: Enrollment Rules\nSummary: {summary}\nQueue: Learning > Configuration\nInfo collected: {answers}\nLinks: {link1}',
+    notes:'Module: Learning | Topic: Enrollment Rules\\nSummary: {summary}\\nQueue: Learning > Configuration\\nInfo collected: {answers}\\nLinks: {link1}',
     pdfLabel:'LearningGuide', pdfLink:'https://help.dayforce.com/', pdfPage:135 }
 ];
 
@@ -355,7 +417,9 @@ const symptomBank = ['Access/Permissions','Configuration','Integration/API','Dat
 })();
 
 /* ========= CAV scoring ========= */
-function tokenize(s){ return (s||'').toLowerCase().split(/[^a-z0-9]+/).filter(Boolean); }
+function tmc_tokenize(s){ return (s||'').toLowerCase().split(/[^a-z0-9]+/).filter(Boolean); }
+function tmc_jacc(a,b){ const A=new Set(tmc_tokenize(a)), B=new Set(tmc_tokenize(b)); const inter=[...A].filter(x=>B.has(x)).length, uni=new Set([...A,...B]).size; return uni? inter/uni : 0; }
+
 function scoreRule(rule, selectedModule, summaryTokens, symptomTags){
   let score = 0;
   if(rule.module.toLowerCase() === (selectedModule||'').toLowerCase()) score += 0.5;
@@ -374,7 +438,7 @@ function suggestRoute(){
   const sym = [...document.querySelectorAll('#symptoms .kpill.active')].map(x=>x.textContent);
   if(!summary){ alert('Please enter an issue summary.'); return; }
 
-  const toks = tokenize(summary);
+  const toks = tmc_tokenize(summary);
   const scored = routingRules.map(r => ({ rule:r, ...scoreRule(r,mod,toks,sym) })).sort((a,b)=>b.score-a.score);
   const top = scored[0];
   const alts = scored.slice(1,4);
@@ -391,7 +455,7 @@ function suggestRoute(){
   const ul=document.getElementById('probeList'); ul.innerHTML='';
   (top.rule.probing||[]).forEach(q=>{ const li=document.createElement('li'); li.textContent=q; ul.appendChild(li); });
 
-  const answersHint = (top.rule.probing||[]).map(q=>`- ${q}`).join('\n');
+  const answersHint = (top.rule.probing||[]).map(q=>`- ${q}`).join('\\n');
   const notes = (top.rule.notes||'').replace('{summary}', summary).replace('{answers}', answersHint).replace('{link1}', top.rule.pdfLink||'');
   document.getElementById('notesOut').value = notes;
 
@@ -416,13 +480,13 @@ function clearCav(){
 }
 function copyNotes(){ const el=document.getElementById('notesOut'); if(!el.value) return; el.select(); document.execCommand('copy'); el.blur(); }
 
-/* ========= CSV Template & Import ========= */
+/* ========= CSV Template & Import for routing rules ========= */
 function downloadCsvTemplate(){
   const csv = [
     'Module,Signals,Queue,Probing,NotesTemplate,PDFLabel,PDFLink,PDFPage',
     'Recruiting,"interview,schedule,calendar,invite,slot,availability,panel,hireright,screening","Recruiting > Interview Scheduling","Which job requisition?;Which candidate(s)?;Which interviewer(s)?;Is calendar provider O365/Google and connected?;Exact error, if any.","Module: Recruiting | Topic: Interview Scheduling\\nSummary: {summary}\\nQueue: Recruiting > Interview Scheduling\\nInfo collected: {answers}\\nLinks: {link1}",RecruitingGuide,https://help.dayforce.com/,158',
     'Recruiting,"import,candidate,csv,workbench,bulk,upload","Recruiting > Data Imports","Import source (CSV/API)?;Sample file received?;Target fields mapped?;Any rows rejected?","Module: Recruiting | Topic: Candidate Import\\nSummary: {summary}\\nQueue: Recruiting > Data Imports\\nInfo collected: {answers}\\nLinks: {link1}",RecruitingGuide,https://help.dayforce.com/,421'
-  ].join('\n');
+  ].join('\\n');
   const blob = new Blob([csv], {type:'text/csv;charset=utf-8;'}); const url = URL.createObjectURL(blob);
   const a = document.createElement('a'); a.href=url; a.download='tmc_routing_template.csv'; document.body.appendChild(a); a.click(); document.body.removeChild(a);
   setTimeout(()=>URL.revokeObjectURL(url), 1200);
@@ -430,14 +494,14 @@ function downloadCsvTemplate(){
 document.getElementById('csvInput')?.addEventListener('change', async (e)=>{
   const f=e.target.files?.[0]; if(!f) return;
   const text = await f.text();
-  const rows = text.split(/\r?\n/).filter(Boolean).map(r=>r.split(/,(?=(?:[^"]*"[^"]*")*[^"]*$)/).map(x=>x.replace(/^"+|"+$/g,'')));
+  const rows = text.split(/\\r?\\n/).filter(Boolean).map(r=>r.split(/,(?=(?:[^"]*"[^"]*")*[^"]*$)/).map(x=>x.replace(/^"+|"+$/g,'')));
   const head = rows.shift().map(h=>h.trim().toLowerCase());
   const idx = (h)=>head.indexOf(h);
   const list = rows.map(r=>({
     module: r[idx('module')]||'',
-    signals: (r[idx('signals')]||'').split(/\s*,\s*/).filter(Boolean),
+    signals: (r[idx('signals')]||'').split(/\\s*,\\s*/).filter(Boolean),
     queue: r[idx('queue')]||'',
-    probing: (r[idx('probing')]||'').split(/\s*;\s*/).filter(Boolean),
+    probing: (r[idx('probing')]||'').split(/\\s*;\\s*/).filter(Boolean),
     notes: r[idx('notestemplate')]||'',
     pdfLabel: r[idx('pdflabel')]||'',
     pdfLink: r[idx('pdflink')]||'',
@@ -469,6 +533,266 @@ document.getElementById('csvInput')?.addEventListener('change', async (e)=>{
     sheetWrap.appendChild(s);
   }
 })();
+
+/* ========= Probing Bank (no infra) ========= */
+let PROBE_BANK = [];
+function seedProbeBankFromRules(){
+  try{
+    PROBE_BANK = (window.routingRules || []).flatMap(r =>
+      (r.probing || []).map(q => ({ module:r.module, question:q, tags:(r.signals||[]) }))
+    );
+  }catch(e){ PROBE_BANK = []; }
+}
+(function loadSavedBank(){
+  try{
+    const raw = localStorage.getItem('tmc_probe_bank');
+    if(raw){ PROBE_BANK = JSON.parse(raw); }
+    else { seedProbeBankFromRules(); }
+  }catch(e){ seedProbeBankFromRules(); }
+})();
+function saveBank(){ try{ localStorage.setItem('tmc_probe_bank', JSON.stringify(PROBE_BANK)); }catch(e){} }
+
+(function initProbingUI(){
+  const modules = [...new Set((window.routingRules||[]).map(r=>r.module))].sort();
+  const pbModule = document.getElementById('pbModule');
+  const pbGenModule = document.getElementById('pbGenModule');
+  modules.forEach(m=>{
+    const o1=document.createElement('option'); o1.value=m; o1.textContent=m; pbModule.appendChild(o1);
+    const o2=document.createElement('option'); o2.value=m; o2.textContent=m; pbGenModule.appendChild(o2);
+  });
+  renderProbeBank();
+})();
+
+function renderProbeBank(){
+  const mod = document.getElementById('pbModule').value;
+  const q = (document.getElementById('pbFilter').value||'').toLowerCase();
+  const list = document.getElementById('bankList'); list.innerHTML='';
+  let rows = PROBE_BANK.filter(x => x.module===mod);
+  if(q){
+    rows = rows.filter(x => (x.question||'').toLowerCase().includes(q) ||
+      (x.tags||[]).some(t => (t||'').toLowerCase().includes(q)));
+  }
+  rows.slice(0,400).forEach(x=>{
+    const li = document.createElement('li'); li.textContent = x.question; list.appendChild(li);
+  });
+}
+function copyBank(){
+  const items = [...document.querySelectorAll('#bankList li')].map(li=>`- ${li.textContent}`);
+  if(!items.length) return;
+  navigator.clipboard.writeText(items.join('\\n'));
+}
+document.getElementById('pbCsv').addEventListener('change', async (e)=>{
+  const f = e.target.files?.[0]; if(!f) return;
+  const text = await f.text();
+  const rows = text.split(/\\r?\\n/).filter(Boolean).map(r => r.split(/,(?=(?:[^"]*"[^"]*")*[^"]*$)/).map(x=>x.replace(/^"+|"+$/g,'')));
+  const head = rows.shift().map(h=>h.trim().toLowerCase());
+  const idx = (h)=>head.indexOf(h);
+  const imported = rows.map(r=>({
+    module: r[idx('module')] || '',
+    question: r[idx('question')] || '',
+    tags: (r[idx('tags')]||'').split(/\\s*,\\s*/).filter(Boolean)
+  })).filter(x => x.module && x.question);
+  if(!imported.length){ alert('No valid rows found. Expect columns: Module,Question,Tags'); return; }
+  PROBE_BANK = PROBE_BANK.concat(imported);
+  saveBank(); renderProbeBank();
+  alert(`Imported ${imported.length} questions.`);
+});
+function downloadProbeCsvTemplate(){
+  const csv = [
+    'Module,Question,Tags',
+    'Recruiting,"Which job requisition and candidate(s) are impacted?","interview,schedule"',
+    'Compensation,"Which cycle and guidelines/matrix are in effect?","merit,matrix"',
+    'Payroll,"Which pay group/period and earning/deduction codes are affected?","earnings,deductions"'
+  ].join('\\n');
+  const blob = new Blob([csv], {type:'text/csv;charset=utf-8;'});
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a'); a.href=url; a.download='tmc_probe_template.csv';
+  document.body.appendChild(a); a.click(); document.body.removeChild(a);
+  setTimeout(()=>URL.revokeObjectURL(url),1200);
+}
+
+/* ===== Lite generator (no LLM) for Probing page ===== */
+async function pbGenerate(){
+  const mod = document.getElementById('pbGenModule').value;
+  const text = (document.getElementById('pbGenText').value||'').trim();
+  const out = document.getElementById('pbGenList');
+  const meta = document.getElementById('pbGenMeta');
+  if(!text){ alert('Enter a short issue summary.'); return; }
+  out.innerHTML = '<li>Generating from module + KB…</li>'; meta.textContent='';
+
+  let topSnips = [];
+  try{
+    const cacheUrl = localStorage.getItem('tmc_kb_cache_url') || '';
+    if(cacheUrl){
+      const r = await fetch(cacheUrl, {cache:'no-store'}); const data = await r.json();
+      const entries = data.entries || data.docs || []; // flexible field name
+      const scored = entries.map(e => ({ e, s: tmc_jacc(text, e.text||'') }))
+                            .sort((a,b)=>b.s-a.s).slice(0,4).map(x=>x.e);
+      topSnips = scored;
+    }
+  }catch(e){ /* ignore */ }
+
+  const signals = (window.routingRules||[])
+    .filter(r => r.module===mod)
+    .flatMap(r => r.signals||[])
+    .slice(0,12);
+
+  const terms = [...new Set(tmc_tokenize(text).concat(signals).concat(
+    topSnips.flatMap(s => tmc_tokenize((s.text||'').slice(0,300)))
+  ))].slice(0,30);
+
+  const generic = [
+    `Scope & impact: which ${mod} entities/users/branches are affected? Any pattern or only certain groups?`,
+    `Repro: exact steps in ${mod} and expected vs actual results.`,
+    `Changes: any recent config, data import, integration, or permission updates before this started?`,
+    `Timeframe: when first noticed? Consistent or intermittent? Any specific dates/pay periods?`,
+    `Artifacts: screenshots/error text (no PII), job IDs, run logs.`,
+    `Variability: all records or those meeting specific criteria (filters, rules, eligibility)?`
+  ];
+  const focus = terms.slice(0,6).map(t => `Confirm how “${t}” is configured and whether it changed recently.`);
+  const questions = [...generic.slice(0,5), ...focus].slice(0,8);
+
+  out.innerHTML=''; questions.forEach(q=>{ const li=document.createElement('li'); li.textContent=q; out.appendChild(li); });
+
+  if(topSnips.length){
+    const cite = topSnips.map(s=>{
+      const tag = (s.label||s.source||'KB') + (s.page? ` p.${s.page}`:'');
+      return s.link ? `<a href="${s.link}#page=${s.page||1}" target="_blank">${tag}</a>` : tag;
+    }).join(' • ');
+    meta.innerHTML = `Based on module + signals${terms.length? ' + summary terms':''}${topSnips.length? ' + KB snippets':''}. ${cite}`;
+  }else{
+    meta.textContent = 'Based on module, signals, and your summary.';
+  }
+}
+function copyPb(){
+  const lines = [...document.querySelectorAll('#pbGenList li')].map(li=>`- ${li.textContent}`);
+  if(!lines.length) return;
+  navigator.clipboard.writeText(lines.join('\\n'));
+}
+
+/* ========= AI Probing (shared) — wrapper prefers LLM if configured ========= */
+async function generateProbes(fromProbingPage=false){
+  const hasLLM = !!localStorage.getItem('tmc_ai_url');
+  if (hasLLM) return generateAIProbesLLM(fromProbingPage);
+  return generateAIProbesLite(fromProbingPage);
+}
+function readContext(fromProbingPage){
+  if (!fromProbingPage){
+    return {
+      module: document.getElementById('modSelect')?.value || '',
+      summary: (document.getElementById('summary')?.value || '').trim(),
+      outListId: 'aiProbeList',
+      outMetaId: 'aiProbeMeta'
+    };
+  } else {
+    return {
+      module: document.getElementById('pbGenModule')?.value || '',
+      summary: (document.getElementById('pbGenText')?.value || '').trim(),
+      outListId: 'pbGenList',
+      outMetaId: 'pbGenMeta'
+    };
+  }
+}
+async function generateAIProbesLite(fromProbingPage=false){
+  const ctx = readContext(fromProbingPage);
+  const out = document.getElementById(ctx.outListId);
+  const meta = document.getElementById(ctx.outMetaId);
+  if(!ctx.summary){ alert('Please enter an issue summary first.'); return; }
+  out.innerHTML = '<li>Generating from module + KB…</li>'; meta.textContent='';
+
+  // 1) Try to use public KB/PDF cache (optional)
+  let topSnips = [];
+  try{
+    const cacheUrl = localStorage.getItem('tmc_kb_cache_url') || '';
+    if(cacheUrl){
+      const r = await fetch(cacheUrl, {cache:'no-store'}); const data = await r.json();
+      const entries = data.entries || data.docs || []; // accept either
+      const scored = entries.map(e => ({ e, s: tmc_jacc(ctx.summary, e.text||'') }))
+                            .sort((a,b)=>b.s-a.s).slice(0,4).map(x=>x.e);
+      topSnips = scored;
+    }
+  }catch(e){ /* ignore */ }
+
+  // 2) Pull signals from your routing rules (by module)
+  const signals = (window.routingRules||[])
+    .filter(r => r.module===ctx.module)
+    .flatMap(r => r.signals||[])
+    .slice(0,12);
+
+  // 3) Build questions (templates + context terms)
+  const terms = [...new Set(tmc_tokenize(ctx.summary)
+                .concat(signals)
+                .concat(topSnips.flatMap(s => tmc_tokenize((s.text||'').slice(0,300)))))]
+                .slice(0,30);
+
+  const generic = [
+    `Scope & impact: which ${ctx.module} entities/users/branches are affected? Any pattern or only certain groups?`,
+    `Repro: exact steps in ${ctx.module} and expected vs actual results.`,
+    `Changes: any recent config, data import, integration, or permission updates before this started?`,
+    `Timeframe: when first noticed? Consistent or intermittent? Any specific dates/pay periods?`,
+    `Artifacts: screenshots/error text (no PII), job IDs, run logs.`,
+    `Variability: all records or those meeting specific criteria (filters, rules, eligibility)?`
+  ];
+  const focus = terms.slice(0,6).map(t => `Confirm how “${t}” is configured and whether it changed recently.`);
+
+  const questions = [...generic.slice(0,5), ...focus].slice(0,8);
+  out.innerHTML=''; questions.forEach(q=>{ const li=document.createElement('li'); li.textContent=q; out.appendChild(li); });
+
+  if(topSnips.length){
+    const cite = topSnips.map(s=>{
+      const tag = (s.label||s.source||'KB') + (s.page? ` p.${s.page}`:'');
+      return s.link ? `<a href="${s.link}#page=${s.page||1}" target="_blank">${tag}</a>` : tag;
+    }).join(' • ');
+    meta.innerHTML = `Based on module + signals${terms.length? ' + summary terms':''}${topSnips.length? ' + KB snippets':''}. ${cite}`;
+  }else{
+    meta.textContent = 'Based on module, signals, and your summary.';
+  }
+}
+
+/* ---------- Optional: LLM version when a server endpoint is configured ---------- */
+async function generateAIProbesLLM(fromProbingPage=false){
+  const ctx = readContext(fromProbingPage);
+  const out = document.getElementById(ctx.outListId);
+  const meta = document.getElementById(ctx.outMetaId);
+  const aiURL = localStorage.getItem('tmc_ai_url') || '';
+  if(!aiURL){ return generateAIProbesLite(fromProbingPage); }
+  if(!ctx.summary){ alert('Please enter an issue summary first.'); return; }
+  out.innerHTML = '<li>Generating with AI…</li>'; meta.textContent='';
+
+  // same snippet retrieval as lite (for RAG)
+  let snippets = [];
+  try{
+    const cacheUrl = localStorage.getItem('tmc_kb_cache_url') || '';
+    if(cacheUrl){
+      const r = await fetch(cacheUrl, {cache:'no-store'}); const data = await r.json();
+      const entries = data.entries || data.docs || [];
+      const scored = entries.map(e => ({ e, s: tmc_jacc(ctx.summary, e.text||'') }))
+                            .sort((a,b)=>b.s-a.s).slice(0,5).map(x=>x.e);
+      snippets = scored.map(e => ({
+        text: (e.text||'').slice(0,600),
+        source: e.label || e.source || 'KB',
+        page: e.page || null,
+        link: e.link || null
+      }));
+    }
+  }catch(e){}
+
+  try{
+    const body = { module: ctx.module, summary: ctx.summary, snippets };
+    const r = await fetch(aiURL, { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(body) });
+    const outJson = await r.json();
+    const qs = outJson?.questions || [];
+    out.innerHTML = '';
+    if(!qs.length){ out.innerHTML='<li>AI did not return questions. Falling back…</li>'; return generateAIProbesLite(fromProbingPage); }
+    qs.forEach(q=>{ const li=document.createElement('li'); li.textContent=q; out.appendChild(li); });
+    const cites = (outJson.citations||[]).map(c => c.link ? `<a href="${c.link}#page=${c.page||1}" target="_blank">${c.source}${c.page?` p.${c.page}`:''}</a>` : `${c.source}${c.page?` p.${c.page}`:''}`).join(' • ');
+    meta.innerHTML = `${outJson.rationale ? (tmc_escape(outJson.rationale) + '<br>') : ''}${cites || ''}`;
+  }catch(e){
+    out.innerHTML='<li>AI request failed. Falling back…</li>';
+    return generateAIProbesLite(fromProbingPage);
+  }
+}
+function tmc_escape(s){ return (s||'').replace(/[&<>"']/g, m=>({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',\"'\":'&#39;' }[m])); }
 
 /* ========= Init ========= */
 go('home');
