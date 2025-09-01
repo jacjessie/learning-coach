@@ -35,9 +35,10 @@
 .table{width:100%;border-collapse:collapse;margin-top:8px}
 .table th,.table td{border:1px solid rgba(255,255,255,.12);padding:8px;vertical-align:top}
 .table th{background:rgba(255,255,255,.06)}
-a{color:#9ec5ff}
-.kpill{display:inline-flex;gap:6px;align-items:center;background:#0d2e6c;border:1px solid #2556be;color:#d7e8ff;border-radius:999px;padding:4px 10px;font-size:12px;margin:3px 6px 0 0;cursor:pointer}
-.kpill.active{background:#1a3f8a}
+a{color:#9ec5ff;text-decoration:none}
+.kpill{display:inline-flex;gap:6px;align-items:center;background:#0d2e6c;border:1px solid #2556be;color:#d7e8ff;border-radius:999px;padding:4px 10px;font-size:12px;margin:3px 6px 0 0}
+.kpill.success{border-color:#19b36b;background:#0d3e2e}
+.scorechip{display:inline-block;background:#143d7a;border:1px solid #2e6ed8;padding:2px 8px;border-radius:999px;font-size:12px}
 @media (max-width:960px){.main{grid-template-columns:1fr}.twoCol{grid-template-columns:1fr}.sidebar{position:static}}
 .iframeBox iframe{width:100%; height:560px; border:0; border-radius:10px;}
 
@@ -85,7 +86,7 @@ a{color:#9ec5ff}
       <div class="twoCol" style="margin-top:12px">
         <div class="panel" style="margin:0">
           <h3>🧭 Correct Routing (Queue Compass)</h3>
-          <p class="small">Get a recommended queue, probing questions, and internal note template (Always review before using).</p>
+          <p class="small">Get a recommended queue and AI-drafted internal notes (Always review before using).</p>
           <button class="btn goBtn" data-go="cav">Open</button>
         </div>
         <div class="panel" style="margin:0">
@@ -107,7 +108,7 @@ a{color:#9ec5ff}
       </div>
     </div>
 
-    <!-- ROUTING -->
+    <!-- CAV: Correct Routing (restored advanced view) -->
     <div id="view-cav" class="panel" style="display:none">
       <h2>🧭 Correct Routing (Queue Compass)</h2>
       <div class="twoCol">
@@ -129,33 +130,86 @@ a{color:#9ec5ff}
           </div>
           <label class="small" style="display:block;margin-top:8px">Issue summary</label>
           <textarea id="summary" placeholder="e.g., Candidate invite emails aren’t going out after interview is scheduled."></textarea>
+
           <div class="small" style="margin-top:8px">Common symptoms (optional)</div>
           <div id="symptoms" class="row" style="margin-top:4px"></div>
+
           <div class="row" style="margin-top:10px">
             <button class="btn" id="btnSuggest">Suggest queue</button>
-            <button class="btn" id="btnAI">AI: Suggest probing questions</button>
-            <button class="btn ghost" id="btnClear">Clear</button>
+            <button class="btn ghost goBtn" data-go="probing">Open Probing Bank</button>
+            <button class="btn secondary" id="btnClear">Clear</button>
           </div>
+          <div class="hint small">Tip: Probing questions live in the Probing page. This CAV focuses on routing & internal notes.</div>
         </div>
+
         <div class="panel" style="margin:0">
           <h3>Recommendation</h3>
-          <div id="routeBox" class="small" style="opacity:.9">Fill the form and click <em>Suggest queue</em>.</div>
+          <div id="routeBox" class="small" style="opacity:.95">Fill the form and click <em>Suggest queue</em>.</div>
           <div id="altBox" class="small" style="margin-top:8px"></div>
-          <h3 style="margin-top:12px">Probing questions</h3>
-          <ul id="probeList" class="small"></ul>
-          <h3 style="margin-top:12px">AI probing suggestions</h3>
-          <ul id="aiProbeList" class="small"></ul>
-          <div id="aiProbeMeta" class="small" style="opacity:.85;margin-top:6px"></div>
+          <div id="linkBox" class="small" style="margin-top:8px"></div>
+
+          <h3 style="margin-top:12px">Internal notes</h3>
+          <textarea id="notesOut" placeholder="[Copyable] Draft notes will appear here…" style="min-height:130px"></textarea>
+          <div class="row" style="margin-top:8px">
+            <button class="btn" id="btnNotesAI">AI: Draft internal notes</button>
+            <button class="btn secondary" id="btnCopyNotes">Copy notes</button>
+          </div>
+          <div id="notesMeta" class="small" style="opacity:.85;margin-top:6px"></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- PROBING -->
+    <div id="view-probing" class="panel" style="display:none">
+      <h2>💬 Probing Question Banks</h2>
+      <div class="twoCol" style="margin-top:10px">
+        <div class="panel" style="margin:0">
+          <h3>Browse bank</h3>
+          <div class="row">
+            <div style="flex:1">
+              <label class="small">Module</label><br>
+              <select id="pbModule" class="input"></select>
+            </div>
+            <div style="flex:2">
+              <label class="small">Filter (tags / text)</label><br>
+              <input id="pbFilter" class="input" placeholder="e.g., schedule, import, matrix" oninput="renderProbeBank()">
+            </div>
+          </div>
+          <ol id="bankList" class="small" style="margin-top:10px"></ol>
+          <div class="row" style="margin-top:10px">
+            <button class="btn" id="btnProbeCsvDl">Download sample CSV</button>
+            <label class="btn ghost" style="cursor:pointer">
+              Import CSV
+              <input id="pbCsv" type="file" accept=".csv" style="display:none">
+            </label>
+            <button class="btn secondary" id="btnCopyBank">Copy visible</button>
+          </div>
+          <div class="hint">CSV columns: <code>Module,Question,Tags</code>. Tags optional (comma-separated).</div>
+        </div>
+
+        <div class="panel" style="margin:0">
+          <h3>Generate suggestions</h3>
+          <div class="row">
+            <div style="flex:1">
+              <label class="small">Module</label><br>
+              <select id="pbGenModule" class="input"></select>
+            </div>
+          </div>
+          <label class="small" style="display:block;margin-top:8px">Issue summary or keywords</label>
+          <textarea id="pbGenText" placeholder="e.g., interview invites not sending after scheduling"></textarea>
+
+          <div class="row" style="margin-top:10px">
+            <button class="btn" id="btnPbGen">Generate (lite)</button>
+            <button class="btn ghost" id="btnPbAI">AI (auto-fallback)</button>
+            <button class="btn secondary" id="btnCopyPb">Copy generated</button>
+          </div>
+          <ul id="pbGenList" class="small" style="margin-top:10px"></ul>
+          <div id="pbGenMeta" class="small" style="opacity:.85;margin-top:6px"></div>
         </div>
       </div>
     </div>
 
     <!-- PLACEHOLDERS -->
-    <div id="view-probing" class="panel" style="display:none">
-      <h2>💬 Probing Question Banks</h2>
-      <div class="small">Coming soon — module banks, CSV import, and AI suggestions.</div>
-      <div class="row" style="margin-top:10px"><button class="btn ghost goBtn" data-go="home">Back</button></div>
-    </div>
     <div id="view-notes" class="panel" style="display:none"><h2>📝 Internal Notes</h2><p class="small">Coming soon.</p></div>
     <div id="view-kb" class="panel" style="display:none"><h2>📚 KB Search</h2><p class="small">Use the Home tile to open your KB search.</p></div>
     <div id="view-feedback" class="panel" style="display:none"><h2>💡 Feedback</h2><p class="small">Coming soon.</p></div>
@@ -174,9 +228,7 @@ a{color:#9ec5ff}
   }
 
   function go(view){
-    // switch active nav
     $$('.navBtn').forEach(b=>b.classList.toggle('active', b.dataset.view===view));
-    // switch panes
     ['home','cav','probing','notes','kb','feedback'].forEach(v=>{
       const pane = $('#view-'+v); if(!pane) return;
       pane.style.display = (v===view?'block':'none');
@@ -207,68 +259,263 @@ a{color:#9ec5ff}
     if(a){ a.href = url || 'tmc_user_g.html'; }
   })();
 
-  // Routing sample rules (kept tiny for demo)
-  const routingRules=[
-    {module:'Recruiting',signals:['interview','schedule','calendar','invite'],queue:'Recruiting > Interview Scheduling',probing:['Which req?','Which candidate(s)?','Which interviewer(s)?','Connected calendar?']},
-    {module:'Compensation',signals:['merit','matrix','guidelines'],queue:'Compensation > Merit',probing:['Which cycle?','How many impacted?']},
-    {module:'Payroll',signals:['earnings','deductions','options','calc'],queue:'Payroll > Earnings & Deductions',probing:['Pay group/period?','Which codes?','Expected vs actual?']}
+  // -------------------- Routing: rules --------------------
+  let routingRules = [
+    { module:'Recruiting', signals:['interview','schedule','calendar','invite','slot','availability','panel','hireright','screening'],
+      queue:'Recruiting > Interview Scheduling', confidenceBase:0.75,
+      notes:'Module: Recruiting | Topic: Interview Scheduling\\nSummary: {summary}\\nQueue: Recruiting > Interview Scheduling\\nLinks: {link1}\\nNo PII.',
+      pdfLabel:'RecruitingGuide', pdfLink:'https://help.dayforce.com/', pdfPage:158 },
+    { module:'Recruiting', signals:['import','candidate','csv','workbench','bulk','upload'],
+      queue:'Recruiting > Data Imports', confidenceBase:0.72,
+      notes:'Module: Recruiting | Topic: Candidate Import\\nSummary: {summary}\\nQueue: Recruiting > Data Imports\\nLinks: {link1}\\nNo PII.',
+      pdfLabel:'RecruitingGuide', pdfLink:'https://help.dayforce.com/', pdfPage:421 },
+    { module:'Compensation', signals:['merit','matrix','guidelines','performance','pay','grade','comp'],
+      queue:'Compensation > Merit', confidenceBase:0.73,
+      notes:'Module: Compensation | Topic: Merit Matrix\\nSummary: {summary}\\nQueue: Compensation > Merit\\nLinks: {link1}\\nNo PII.',
+      pdfLabel:'CompensationGuide', pdfLink:'https://help.dayforce.com/', pdfPage:159 },
+    { module:'Payroll', signals:['earnings','deductions','options','calc','tax','payroll'],
+      queue:'Payroll > Earnings & Deductions', confidenceBase:0.7,
+      notes:'Module: Payroll | Topic: Earnings & Deductions\\nSummary: {summary}\\nQueue: Payroll > Earnings & Deductions\\nLinks: {link1}\\nNo PII.',
+      pdfLabel:'PayrollGuide', pdfLink:'https://help.dayforce.com/', pdfPage:342 },
+    { module:'Time', signals:['clock','time','meal','break','premium','rule','punch'],
+      queue:'Time > Rules', confidenceBase:0.68,
+      notes:'Module: Time | Topic: Meal Break / Clock Rules\\nSummary: {summary}\\nQueue: Time > Rules\\nLinks: {link1}\\nNo PII.',
+      pdfLabel:'TimeGuide', pdfLink:'https://help.dayforce.com/', pdfPage:201 },
+    { module:'Learning', signals:['enroll','learning','plan','rules','course','assignment'],
+      queue:'Learning > Configuration', confidenceBase:0.66,
+      notes:'Module: Learning | Topic: Enrollment Rules\\nSummary: {summary}\\nQueue: Learning > Configuration\\nLinks: {link1}\\nNo PII.',
+      pdfLabel:'LearningGuide', pdfLink:'https://help.dayforce.com/', pdfPage:135 }
   ];
 
-  // Seed module options + symptom pills
+  const modules = [...new Set(routingRules.map(r=>r.module))].sort();
+  const symptomBank = ['Access/Permissions','Configuration','Integration/API','Data Issue','Bug/Unexpected','How-to/Training'];
+
   (function initCAV(){
-    const modSel = $('#modSelect');
-    const symWrap = $('#symptoms');
-    if(!modSel || !symWrap) return;
-    [...new Set(routingRules.map(r=>r.module))].forEach(m=>{
-      const o=document.createElement('option'); o.value=m; o.textContent=m; modSel.appendChild(o);
-    });
-    ['Access/Permissions','Configuration','Integration/API','Data Issue','Bug/Unexpected','How-to/Training'].forEach(s=>{
-      const b=document.createElement('span'); b.className='kpill'; b.textContent=s; b.onclick=()=>b.classList.toggle('active'); symWrap.appendChild(b);
-    });
+    const modSel = $('#modSelect'); const symWrap = $('#symptoms');
+    if(modSel){ modules.forEach(m=>{ const o=document.createElement('option'); o.value=m; o.textContent=m; modSel.appendChild(o); }); }
+    if(symWrap){ symptomBank.forEach(s=>{ const b=document.createElement('span'); b.className='kpill'; b.textContent=s; symWrap.appendChild(b); }); }
   })();
 
+  // Utility scoring
   function tokenize(s){ return (s||'').toLowerCase().split(/[^a-z0-9]+/).filter(Boolean); }
+  function jacc(a,b){ const A=new Set(tokenize(a)), B=new Set(tokenize(b)); const inter=[...A].filter(x=>B.has(x)).length, uni=new Set([...A,...B]).size; return uni? inter/uni : 0; }
+
+  function scoreRule(rule, selectedModule, summaryTokens, symptomTags){
+    let score = 0;
+    if(rule.module.toLowerCase() === (selectedModule||'').toLowerCase()) score += 0.5;
+    const sig = (rule.signals||[]).map(x=>x.toLowerCase());
+    const hits = summaryTokens.filter(t=>sig.includes(t));
+    score += Math.min(0.4, hits.length * 0.07);
+    if(symptomTags.some(t => rule.signals.join(' ').toLowerCase().includes(t.toLowerCase()))) score += 0.1;
+    score += (rule.confidenceBase||0);
+    return {score, hits};
+  }
 
   async function suggestRoute(){
-    const modSel = $('#modSelect'), sum = $('#summary'), ul = $('#probeList'), box = $('#routeBox');
-    if(!modSel || !sum || !ul || !box) return;
-    const mod = modSel.value, summary = (sum.value||'').trim();
+    const mod = $('#modSelect')?.value || '';
+    const summary = ($('#summary')?.value || '').trim();
     if(!summary){ alert('Please enter an issue summary.'); return; }
-    await showLoader(1400);
+    await showLoader(1200);
+    const sym = $$('#symptoms .kpill.success, #symptoms .kpill.active').map(x=>x.textContent);
     const toks = tokenize(summary);
-    const scored = routingRules.map(r=>({r, s: (r.module===mod?0.5:0)+toks.filter(t=>r.signals.includes(t)).length*0.1})).sort((a,b)=>b.s-a.s);
-    const top = scored[0]?.r;
-    if(!top){ box.textContent='No suggestion.'; return; }
-    box.innerHTML = `Recommended queue: <strong>${top.queue}</strong>`;
-    ul.innerHTML=''; (top.probing||[]).forEach(q=>{ const li=document.createElement('li'); li.textContent=q; ul.appendChild(li); });
-  }
-  async function clearCav(){
-    if($('#summary')) $('#summary').value='';
-    if($('#probeList')) $('#probeList').innerHTML='';
-    if($('#routeBox')) $('#routeBox').textContent='Fill the form and click Suggest queue.';
-  }
-  async function generateProbes(){
-    // placeholder: just copy probing list to AI list with delay
-    const out=$('#aiProbeList'); if(!out) return;
-    out.innerHTML='<li>Thinking…</li>';
-    await showLoader(1800);
-    const base=[...$('#probeList')?.querySelectorAll('li')||[]].map(li=>li.textContent);
-    out.innerHTML='';
-    (base.length?base:[
-      'Scope & impact? Which users/entities affected?',
-      'Exact repro steps and expected vs actual?',
-      'Any recent configuration or integration changes?',
-      'Timeframe—when first noticed? Consistent or intermittent?'
-    ]).forEach(q=>{ const li=document.createElement('li'); li.textContent=q; out.appendChild(li); });
-    const meta = $('#aiProbeMeta'); if(meta) meta.textContent='Generated locally (demo).';
+    const scored = routingRules.map(r => ({ rule:r, ...scoreRule(r,mod,toks,sym) })).sort((a,b)=>b.score-a.score);
+    const top = scored[0]; const alts = scored.slice(1,4);
+    if(!top){ $('#routeBox').textContent = 'No matching rule yet. Try adding more detail.'; return; }
+
+    const confPct = Math.min(99, Math.round(top.score*100));
+    const keywords = top.hits.length ? top.hits.map(h=>`<span class="kpill">${h}</span>`).join(' ') : '<span class="kpill">signals</span>';
+    $('#routeBox').innerHTML =
+      `<div class="notice" style="border-color:#2a4fa2">Recommended queue: <strong>${top.rule.queue}</strong> <span class="scorechip" style="margin-left:8px">${confPct}%</span></div>
+       <div class="small" style="margin-top:6px">Matched keywords: ${keywords}</div>`;
+
+    const linkDiv = $('#linkBox');
+    linkDiv.innerHTML = top.rule.pdfLink ?
+      `Link: <a href="${top.rule.pdfLink}#page=${top.rule.pdfPage||1}" target="_blank">${top.rule.pdfLabel||'Guide'} p.${top.rule.pdfPage||'?'}</a>` : '';
+
+    const altDiv=$('#altBox'); altDiv.innerHTML='';
+    if(alts.length){
+      let s='<div class="small" style="margin:6px 0"><strong>Other possible queues</strong></div><table class="table small"><tr><th>Queue</th><th>Why</th><th>Score</th></tr>';
+      alts.forEach(a=>{
+        const whyA = a.hits.length? a.hits.join(', ') : 'Signals overlap';
+        s += `<tr><td>${a.rule.queue}</td><td>${whyA}</td><td>${Math.round(a.score*100)}%</td></tr>`;
+      });
+      s+='</table>'; altDiv.innerHTML=s;
+    }
+
+    // Pre-fill notes (lite)
+    const notes = (top.rule.notes||'').replace('{summary}', summary)
+      .replace('{link1}', top.rule.pdfLink ? `${top.rule.pdfLabel||'Guide'} p.${top.rule.pdfPage}` : '');
+    $('#notesOut').value = notes;
+
+    // Save context for AI notes
+    window.__tmc_topRule = top.rule;
+    window.__tmc_summary = summary;
   }
 
-  // Bind CAV buttons
+  async function draftNotesLite(){
+    const rule = window.__tmc_topRule; const summary = window.__tmc_summary || ($('#summary')?.value||'');
+    if(!rule || !summary){ alert('Run Suggest queue first.'); return; }
+    const notes = (rule.notes||'').replace('{summary}', summary)
+      .replace('{link1}', rule.pdfLink ? `${rule.pdfLabel||'Guide'} p.${rule.pdfPage}` : '');
+    $('#notesOut').value = notes + '\\n\\n(Generated without AI — review before sending)';
+    $('#notesMeta').textContent = 'Drafted from template (lite).';
+  }
+
+  async function draftNotesAI(){
+    const aiURL = localStorage.getItem('tmc_ai_url') || '';
+    if(!aiURL) return draftNotesLite();
+    const rule = window.__tmc_topRule; const summary = window.__tmc_summary || ($('#summary')?.value||'');
+    if(!rule || !summary){ alert('Run Suggest queue first.'); return; }
+    $('#notesMeta').textContent = 'Drafting with AI…';
+    await showLoader(1400);
+
+    let snippets = [];
+    try{
+      const cacheUrl = localStorage.getItem('tmc_kb_cache_url') || '';
+      if(cacheUrl){
+        const r = await fetch(cacheUrl, {cache:'no-store'}); const data = await r.json();
+        const entries = data.entries || data.docs || [];
+        const scored = entries.map(e => ({ e, s: jacc(summary, e.text||'') }))
+                              .sort((a,b)=>b.s-a.s).slice(0,4).map(x=>x.e);
+        snippets = scored.map(e => ({ text:(e.text||'').slice(0,600), source:e.label||e.source||'KB', page:e.page||null, link:e.link||null }));
+      }
+    }catch(e){}
+
+    try{
+      const body = { task:'notes', module: rule.module, queue: rule.queue, summary, snippets };
+      const r = await fetch(aiURL, { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(body) });
+      const out = await r.json();
+      const txt = out?.notes || '';
+      if(txt){
+        $('#notesOut').value = txt;
+        const cites = (out.citations||[]).map(c => c.link ? `<a href="${c.link}#page=${c.page||1}" target="_blank">${c.source}${c.page?` p.${c.page}`:''}</a>` : `${c.source}${c.page?` p.${c.page}`:''}`).join(' • ');
+        $('#notesMeta').innerHTML = (out.rationale? out.rationale+'<br>':'') + (cites||'');
+        return;
+      }
+      await draftNotesLite();
+    }catch(e){
+      await draftNotesLite();
+    }
+  }
+
+  function copyNotes(){ const el=$('#notesOut'); if(!el || !el.value) return; el.select(); document.execCommand('copy'); el.blur(); }
+
+  // --------- Probing bank (simple impl from prior file) ---------
+  let PROBE_BANK = [];
+  function seedProbeBank(){ // derive from routing signals minimal
+    PROBE_BANK = routingRules.flatMap(r => (r.signals||[]).slice(0,6).map((t,i)=>({module:r.module, question:`Confirm how “${t}” is configured and if it changed recently.`, tags:[t]})));
+  }
+  (function initBank(){
+    seedProbeBank();
+    const mods = [...new Set(routingRules.map(r=>r.module))].sort();
+    const pbM = $('#pbModule'), pbGM = $('#pbGenModule');
+    mods.forEach(m=>{ const o1=document.createElement('option'); o1.value=m; o1.textContent=m; pbM.appendChild(o1);
+                      const o2=document.createElement('option'); o2.value=m; o2.textContent=m; pbGM.appendChild(o2); });
+    renderProbeBank();
+  })();
+
+  function renderProbeBank(){
+    const mod = $('#pbModule')?.value; const q = ($('#pbFilter')?.value||'').toLowerCase();
+    const list = $('#bankList'); if(!list) return; list.innerHTML='';
+    let rows = PROBE_BANK.filter(x => !mod || x.module===mod);
+    if(q){ rows = rows.filter(x => (x.question||'').toLowerCase().includes(q) || (x.tags||[]).some(t => (t||'').toLowerCase().includes(q))); }
+    rows.slice(0,400).forEach(x=>{ const li=document.createElement('li'); li.textContent = x.question; list.appendChild(li); });
+  }
+  function downloadProbeCSV(){
+    const csv = ['Module,Question,Tags','Recruiting,"Which req and candidate(s) are impacted?","interview,schedule"','Compensation,"Which cycle and matrix/guidelines apply?","merit,matrix"'].join('\\n');
+    const blob = new Blob([csv], {type:'text/csv;charset=utf-8;'}); const url = URL.createObjectURL(blob);
+    const a = document.createElement('a'); a.href=url; a.download='tmc_probe_template.csv'; document.body.appendChild(a); a.click(); document.body.removeChild(a);
+    setTimeout(()=>URL.revokeObjectURL(url),1200);
+  }
+  $('#pbCsv')?.addEventListener('change', async (e)=>{
+    const f=e.target.files?.[0]; if(!f) return; const text=await f.text();
+    const rows = text.split(/\\r?\\n/).filter(Boolean).map(r => r.split(/,(?=(?:[^"]*"[^"]*")*[^"]*$)/).map(x=>x.replace(/^"+|"+$/g,'')));
+    const head = rows.shift().map(h=>h.trim().toLowerCase()); const idx=(h)=>head.indexOf(h);
+    const imported = rows.map(r=>({module:r[idx('module')]||'', question:r[idx('question')]||'', tags:(r[idx('tags')]||'').split(/\\s*,\\s*/).filter(Boolean)}))
+                        .filter(x=>x.module && x.question);
+    if(imported.length){ PROBE_BANK = PROBE_BANK.concat(imported); renderProbeBank(); alert(`Imported ${imported.length} questions.`); }
+  });
+  $('#btnProbeCsvDl')?.addEventListener('click', downloadProbeCSV);
+  $('#btnCopyBank')?.addEventListener('click', ()=>{
+    const items = [...$('#bankList')?.querySelectorAll('li')||[]].map(li=>`- ${li.textContent}`);
+    if(items.length) navigator.clipboard.writeText(items.join('\\n'));
+  });
+
+  // Generate probing (lite + AI)
+  function tmc_jacc(a,b){ const A=new Set(tokenize(a)), B=new Set(tokenize(b)); const inter=[...A].filter(x=>B.has(x)).length, uni=new Set([...A,...B]).size; return uni? inter/uni : 0; }
+  async function pbGenerateLite(){
+    const mod = $('#pbGenModule')?.value||''; const text = ($('#pbGenText')?.value||'').trim();
+    const out = $('#pbGenList'); const meta = $('#pbGenMeta'); if(!text){ alert('Enter a short issue summary.'); return; }
+    out.innerHTML = '<li>Generating…</li>'; meta.textContent=''; await showLoader(900);
+    let topSnips = [];
+    try{
+      const cacheUrl = localStorage.getItem('tmc_kb_cache_url') || '';
+      if(cacheUrl){
+        const r = await fetch(cacheUrl, {cache:'no-store'}); const data = await r.json();
+        const entries = data.entries || data.docs || [];
+        topSnips = entries.map(e=>({e,s:tmc_jacc(text,e.text||'')})).sort((a,b)=>b.s-a.s).slice(0,4).map(x=>x.e);
+      }
+    }catch(e){}
+    const signals = routingRules.filter(r=>r.module===mod).flatMap(r=>r.signals||[]).slice(0,12);
+    const terms = [...new Set(tokenize(text).concat(signals).concat(topSnips.flatMap(s=>tokenize((s.text||'').slice(0,300)))))].slice(0,30);
+    const generic = [
+      `Scope & impact: which ${mod} users/groups/entities are affected?`,
+      `Repro: exact steps + expected vs actual results.`,
+      `Changes: any recent config/import/integration/permission updates?`,
+      `Timeframe: when first noticed? Consistent or intermittent?`,
+      `Artifacts: screenshots/no PII, IDs, logs.`
+    ];
+    const focus = terms.slice(0,6).map(t => `Confirm how “${t}” is configured and whether it changed recently.`);
+    const questions = [...generic.slice(0,4), ...focus].slice(0,8);
+    out.innerHTML=''; questions.forEach(q=>{ const li=document.createElement('li'); li.textContent=q; out.appendChild(li); });
+    if(topSnips.length){
+      const cite = topSnips.map(s=>{
+        const tag = (s.label||s.source||'KB') + (s.page? ` p.${s.page}`:'');
+        return s.link ? `<a href="${s.link}#page=${s.page||1}" target="_blank">${tag}</a>` : tag;
+      }).join(' • ');
+      meta.innerHTML = `Based on module + signals + KB snippets. ${cite}`;
+    }else{
+      meta.textContent = 'Based on module + signals + your summary.';
+    }
+  }
+  async function pbGenerateAI(){
+    const aiURL = localStorage.getItem('tmc_ai_url') || '';
+    if(!aiURL) return pbGenerateLite();
+    const mod = $('#pbGenModule')?.value||''; const text = ($('#pbGenText')?.value||'').trim();
+    const out = $('#pbGenList'); const meta = $('#pbGenMeta'); if(!text){ alert('Enter a short issue summary.'); return; }
+    out.innerHTML = '<li>Generating with AI…</li>'; meta.textContent=''; await showLoader(1200);
+    let snippets = [];
+    try{
+      const cacheUrl = localStorage.getItem('tmc_kb_cache_url') || '';
+      if(cacheUrl){ const r = await fetch(cacheUrl, {cache:'no-store'}); const data = await r.json();
+        const entries = data.entries || data.docs || [];
+        const scored = entries.map(e => ({ e, s: tmc_jacc(text, e.text||'') }))
+                              .sort((a,b)=>b.s-a.s).slice(0,5).map(x=>x.e);
+        snippets = scored.map(e => ({ text:(e.text||'').slice(0,600), source:e.label||e.source||'KB', page:e.page||null, link:e.link||null }));
+      }
+    }catch(e){}
+    try{
+      const body = { task:'probes', module:mod, summary:text, snippets };
+      const r = await fetch(aiURL, {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(body)});
+      const j = await r.json(); const qs = j?.questions || [];
+      out.innerHTML='';
+      if(!qs.length){ await pbGenerateLite(); return; }
+      qs.forEach(q=>{ const li=document.createElement('li'); li.textContent=q; out.appendChild(li); });
+      const cites = (j.citations||[]).map(c => c.link ? `<a href="${c.link}#page=${c.page||1}" target="_blank">${c.source}${c.page?` p.${c.page}`:''}</a>` : `${c.source}${c.page?` p.${c.page}`:''}`).join(' • ');
+      meta.innerHTML = (j.rationale? j.rationale+'<br>':'' ) + (cites||'');
+    }catch(e){ await pbGenerateLite(); }
+  }
+
+  // Bind buttons
   $('#btnSuggest')?.addEventListener('click', suggestRoute);
-  $('#btnClear')?.addEventListener('click', clearCav);
-  $('#btnAI')?.addEventListener('click', generateProbes);
+  $('#btnClear')?.addEventListener('click', async ()=>{ if($('#summary')) $('#summary').value=''; $('#notesOut').value=''; $('#routeBox').textContent='Fill the form and click Suggest queue.'; $('#altBox').innerHTML=''; $('#linkBox').innerHTML=''; });
+  $('#btnNotesAI')?.addEventListener('click', draftNotesAI);
+  $('#btnCopyNotes')?.addEventListener('click', copyNotes);
+  $('#btnPbGen')?.addEventListener('click', pbGenerateLite);
+  $('#btnPbAI')?.addEventListener('click', pbGenerateAI);
+  $('#pbModule')?.addEventListener('change', renderProbeBank);
 
-  // Start on Home
+  // Start
   go('home');
 })();
 </script>
