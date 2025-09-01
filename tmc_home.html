@@ -10,7 +10,7 @@
   --bg:#061a3a; --panel:#0a234f; --text:#f1f7ff; --muted:#b9d3ff;
 }
 *{box-sizing:border-box} body{margin:0;font-family:Inter,Segoe UI,system-ui,Arial,sans-serif;background:var(--bg);color:var(--text)}
-.header{position:sticky;top:0;z-index:2;display:flex;align-items:center;gap:14px;padding:10px 16px;border-bottom:1px solid rgba(255,255,255,.06);
+.header{position:sticky;top:0;z-index:3;display:flex;align-items:center;gap:14px;padding:10px 16px;border-bottom:1px solid rgba(255,255,255,.06);
   background:radial-gradient(900px 340px at 0% 0%, rgba(31,209,255,.38), transparent 60%),radial-gradient(900px 340px at 100% 100%, rgba(10,102,255,.35), transparent 60%),linear-gradient(135deg, var(--brand-blue) 0%, var(--brand-deep) 60%);}
 .logoWrap{width:36px;height:36px;border-radius:8px;overflow:hidden;display:flex;align-items:center;justify-content:center;box-shadow:0 4px 14px rgba(10,102,255,.28)}
 .title{font-size:20px;font-weight:700;letter-spacing:.3px}
@@ -20,7 +20,7 @@
 .sidebar{background:#0a234f;border:1px solid rgba(255,255,255,.08);border-radius:14px;padding:10px;height:fit-content;position:sticky;top:92px}
 .menuBtn{display:flex;gap:10px;align-items:center;width:100%;background:rgba(255,255,255,.02);border:1px solid rgba(255,255,255,.08);color:var(--text);
   padding:10px;border-radius:10px;margin:6px 0;cursor:pointer;text-align:left;}
-.menuBtn.active{border-color: rgba(31,209,255,.65);box-shadow:0 0 0 2px rgba(31,209,255,.18) inset, 0 4px 14px rgba(10,102,255,.2);
+.navBtn.active{border-color: rgba(31,209,255,.65);box-shadow:0 0 0 2px rgba(31,209,255,.18) inset, 0 4px 14px rgba(10,102,255,.2);
   background:linear-gradient(135deg, rgba(31,209,255,.08), rgba(10,102,255,.08));}
 .panel{background:#0a234f;border:1px solid rgba(255,255,255,.08);border-radius:14px;padding:14px;margin-bottom:16px}
 .row{display:flex;gap:12px;flex-wrap:wrap}
@@ -36,8 +36,15 @@
 .table th,.table td{border:1px solid rgba(255,255,255,.12);padding:8px;vertical-align:top}
 .table th{background:rgba(255,255,255,.06)}
 a{color:#9ec5ff}
+.kpill{display:inline-flex;gap:6px;align-items:center;background:#0d2e6c;border:1px solid #2556be;color:#d7e8ff;border-radius:999px;padding:4px 10px;font-size:12px;margin:3px 6px 0 0;cursor:pointer}
+.kpill.active{background:#1a3f8a}
 @media (max-width:960px){.main{grid-template-columns:1fr}.twoCol{grid-template-columns:1fr}.sidebar{position:static}}
 .iframeBox iframe{width:100%; height:560px; border:0; border-radius:10px;}
+
+/* Loading overlay */
+#loadingOverlay{position:fixed;inset:0;background:rgba(3,10,25,.55);display:none;align-items:center;justify-content:center;z-index:10}
+.spinner{width:56px;height:56px;border:5px solid rgba(255,255,255,.28);border-top-color:#1fd1ff;border-radius:50%;animation:spin 1s linear infinite}
+@keyframes spin{to{transform:rotate(360deg)}}
 </style>
 </head>
 <body>
@@ -54,14 +61,17 @@ a{color:#9ec5ff}
 </header>
 <div class="brand-hero">Point every case to the best path.</div>
 
+<!-- Loading overlay -->
+<div id="loadingOverlay" aria-hidden="true"><div class="spinner"></div></div>
+
 <section class="main">
   <aside class="sidebar">
-    <button class="menuBtn active" data-view="home">🏠 Home</button>
-    <button class="menuBtn" data-view="cav">🧭 Correct Routing (Queue Compass)</button>
-    <button class="menuBtn" data-view="probing">💬 Probing Questions</button>
-    <button class="menuBtn" data-view="notes">📝 Internal Notes</button>
-    <button class="menuBtn" data-view="kb">📚 KB Search</button>
-    <button class="menuBtn" data-view="feedback">💡 Feedback</button>
+    <button class="menuBtn navBtn active" data-view="home">🏠 Home</button>
+    <button class="menuBtn navBtn" data-view="cav">🧭 Correct Routing (Queue Compass)</button>
+    <button class="menuBtn navBtn" data-view="probing">💬 Probing Questions</button>
+    <button class="menuBtn navBtn" data-view="notes">📝 Internal Notes</button>
+    <button class="menuBtn navBtn" data-view="kb">📚 KB Search</button>
+    <button class="menuBtn navBtn" data-view="feedback">💡 Feedback</button>
     <div class="panel small" style="margin-top:8px">This page is static. Admins configure endpoints via <code>localStorage</code>. Users do not sign in.</div>
   </aside>
 
@@ -76,7 +86,7 @@ a{color:#9ec5ff}
         <div class="panel" style="margin:0">
           <h3>🧭 Correct Routing (Queue Compass)</h3>
           <p class="small">Get a recommended queue, probing questions, and internal note template (Always review before using).</p>
-          <button class="btn" onclick="go('cav')">Open</button>
+          <button class="btn goBtn" data-go="cav">Open</button>
         </div>
         <div class="panel" style="margin:0">
           <h3>📚 KB Search (Excel + PDF)</h3>
@@ -87,17 +97,17 @@ a{color:#9ec5ff}
         <div class="panel" style="margin:0">
           <h3>💬 Probing Question Banks</h3>
           <p class="small">Module-specific questions to qualify issues quickly. (Always review before using)</p>
-          <button class="btn secondary" onclick="go('probing')">Browse</button>
+          <button class="btn secondary goBtn" data-go="probing">Browse</button>
         </div>
         <div class="panel" style="margin:0">
           <h3>📝 Internal Notes Formatter</h3>
           <p class="small">Generate clean, consistent internal notes ready to paste into your case. (Always review before using)</p>
-          <button class="btn secondary" onclick="go('notes')">Use formatter</button>
+          <button class="btn secondary goBtn" data-go="notes">Use formatter</button>
         </div>
       </div>
     </div>
 
-    <!-- ROUTING (exists so JS doesn't fail) -->
+    <!-- ROUTING -->
     <div id="view-cav" class="panel" style="display:none">
       <h2>🧭 Correct Routing (Queue Compass)</h2>
       <div class="twoCol">
@@ -122,9 +132,9 @@ a{color:#9ec5ff}
           <div class="small" style="margin-top:8px">Common symptoms (optional)</div>
           <div id="symptoms" class="row" style="margin-top:4px"></div>
           <div class="row" style="margin-top:10px">
-            <button class="btn" onclick="suggestRoute()">Suggest queue</button>
-            <button class="btn" onclick="generateProbes()">AI: Suggest probing questions</button>
-            <button class="btn ghost" onclick="clearCav()">Clear</button>
+            <button class="btn" id="btnSuggest">Suggest queue</button>
+            <button class="btn" id="btnAI">AI: Suggest probing questions</button>
+            <button class="btn ghost" id="btnClear">Clear</button>
           </div>
         </div>
         <div class="panel" style="margin:0">
@@ -140,11 +150,11 @@ a{color:#9ec5ff}
       </div>
     </div>
 
-    <!-- PROBING + FEEDBACK placeholders (so JS is safe even if not used) -->
+    <!-- PLACEHOLDERS -->
     <div id="view-probing" class="panel" style="display:none">
       <h2>💬 Probing Question Banks</h2>
       <div class="small">Coming soon — module banks, CSV import, and AI suggestions.</div>
-      <div class="row" style="margin-top:10px"><button class="btn ghost" onclick="go('home')">Back</button></div>
+      <div class="row" style="margin-top:10px"><button class="btn ghost goBtn" data-go="home">Back</button></div>
     </div>
     <div id="view-notes" class="panel" style="display:none"><h2>📝 Internal Notes</h2><p class="small">Coming soon.</p></div>
     <div id="view-kb" class="panel" style="display:none"><h2>📚 KB Search</h2><p class="small">Use the Home tile to open your KB search.</p></div>
@@ -153,50 +163,114 @@ a{color:#9ec5ff}
 </section>
 
 <script>
-// ---- safe helpers ----
-function el(id){ return document.getElementById(id); }
-function on(q,ev,fn){ const n=document.querySelector(q); if(n) n.addEventListener(ev,fn); }
+(function(){
+  const $ = (s,root=document)=>root.querySelector(s);
+  const $$ = (s,root=document)=>Array.from(root.querySelectorAll(s));
+  const overlay = $('#loadingOverlay');
 
-// ---- nav ----
-function go(view){
-  document.querySelectorAll('.menuBtn').forEach(b=>b.classList.toggle('active', b.dataset.view===view || (view==='home'&&b.dataset.view==='home')));
-  ['home','cav','probing','notes','kb','feedback'].forEach(v=>{ const pane = el('view-'+v); if(pane) pane.style.display = (v===view?'block':'none'); });
-}
-document.querySelectorAll('.menuBtn').forEach(b=>b.addEventListener('click', ()=>go(b.dataset.view)));
+  function showLoader(ms=1700){
+    overlay.style.display='flex';
+    return new Promise(res=>setTimeout(()=>{ overlay.style.display='none'; res(); }, ms));
+  }
 
-// ---- KB link (defensive) ----
-(function(){ const a = el('kbLink'); const url = localStorage.getItem('tmc_kb_url')||''; if(a){ a.href = url || 'tmc_user_g.html'; } })();
+  function go(view){
+    // switch active nav
+    $$('.navBtn').forEach(b=>b.classList.toggle('active', b.dataset.view===view));
+    // switch panes
+    ['home','cav','probing','notes','kb','feedback'].forEach(v=>{
+      const pane = $('#view-'+v); if(!pane) return;
+      pane.style.display = (v===view?'block':'none');
+    });
+  }
 
-// ---- minimal routing demo (defensive) ----
-const routingRules=[{module:'Recruiting',signals:['interview','schedule','calendar','invite'],queue:'Recruiting > Interview Scheduling',probing:['Which req?','Which candidate(s)?','Which interviewer(s)?','Connected calendar?']},
-                    {module:'Compensation',signals:['merit','matrix','guidelines'],queue:'Compensation > Merit',probing:['Which cycle?','How many impacted?']}];
-
-(function initCAV(){
-  const modSel = el('modSelect'); const symWrap = el('symptoms');
-  if(!modSel || !symWrap) return; // if section not present, do nothing
-  [...new Set(routingRules.map(r=>r.module))].forEach(m=>{ const o=document.createElement('option'); o.value=m; o.textContent=m; modSel.appendChild(o); });
-  ['Access/Permissions','Configuration','Integration/API','Data Issue','Bug/Unexpected','How-to/Training'].forEach(s=>{
-    const b=document.createElement('button'); b.className='menuBtn'; b.style.width='auto'; b.textContent=s; b.onclick=()=>b.classList.toggle('active'); symWrap.appendChild(b);
+  // Attach nav clicks
+  $$('.navBtn').forEach(b=>{
+    b.addEventListener('click', async ()=>{
+      const v = b.dataset.view || 'home';
+      await showLoader(1800);
+      go(v);
+    });
   });
+  // Card buttons
+  $$('.goBtn').forEach(btn=>{
+    btn.addEventListener('click', async ()=>{
+      const v = btn.dataset.go || 'home';
+      await showLoader(1600);
+      go(v);
+    });
+  });
+
+  // KB link
+  (function initKb(){
+    const a = $('#kbLink');
+    const url = localStorage.getItem('tmc_kb_url') || '';
+    if(a){ a.href = url || 'tmc_user_g.html'; }
+  })();
+
+  // Routing sample rules (kept tiny for demo)
+  const routingRules=[
+    {module:'Recruiting',signals:['interview','schedule','calendar','invite'],queue:'Recruiting > Interview Scheduling',probing:['Which req?','Which candidate(s)?','Which interviewer(s)?','Connected calendar?']},
+    {module:'Compensation',signals:['merit','matrix','guidelines'],queue:'Compensation > Merit',probing:['Which cycle?','How many impacted?']},
+    {module:'Payroll',signals:['earnings','deductions','options','calc'],queue:'Payroll > Earnings & Deductions',probing:['Pay group/period?','Which codes?','Expected vs actual?']}
+  ];
+
+  // Seed module options + symptom pills
+  (function initCAV(){
+    const modSel = $('#modSelect');
+    const symWrap = $('#symptoms');
+    if(!modSel || !symWrap) return;
+    [...new Set(routingRules.map(r=>r.module))].forEach(m=>{
+      const o=document.createElement('option'); o.value=m; o.textContent=m; modSel.appendChild(o);
+    });
+    ['Access/Permissions','Configuration','Integration/API','Data Issue','Bug/Unexpected','How-to/Training'].forEach(s=>{
+      const b=document.createElement('span'); b.className='kpill'; b.textContent=s; b.onclick=()=>b.classList.toggle('active'); symWrap.appendChild(b);
+    });
+  })();
+
+  function tokenize(s){ return (s||'').toLowerCase().split(/[^a-z0-9]+/).filter(Boolean); }
+
+  async function suggestRoute(){
+    const modSel = $('#modSelect'), sum = $('#summary'), ul = $('#probeList'), box = $('#routeBox');
+    if(!modSel || !sum || !ul || !box) return;
+    const mod = modSel.value, summary = (sum.value||'').trim();
+    if(!summary){ alert('Please enter an issue summary.'); return; }
+    await showLoader(1400);
+    const toks = tokenize(summary);
+    const scored = routingRules.map(r=>({r, s: (r.module===mod?0.5:0)+toks.filter(t=>r.signals.includes(t)).length*0.1})).sort((a,b)=>b.s-a.s);
+    const top = scored[0]?.r;
+    if(!top){ box.textContent='No suggestion.'; return; }
+    box.innerHTML = `Recommended queue: <strong>${top.queue}</strong>`;
+    ul.innerHTML=''; (top.probing||[]).forEach(q=>{ const li=document.createElement('li'); li.textContent=q; ul.appendChild(li); });
+  }
+  async function clearCav(){
+    if($('#summary')) $('#summary').value='';
+    if($('#probeList')) $('#probeList').innerHTML='';
+    if($('#routeBox')) $('#routeBox').textContent='Fill the form and click Suggest queue.';
+  }
+  async function generateProbes(){
+    // placeholder: just copy probing list to AI list with delay
+    const out=$('#aiProbeList'); if(!out) return;
+    out.innerHTML='<li>Thinking…</li>';
+    await showLoader(1800);
+    const base=[...$('#probeList')?.querySelectorAll('li')||[]].map(li=>li.textContent);
+    out.innerHTML='';
+    (base.length?base:[
+      'Scope & impact? Which users/entities affected?',
+      'Exact repro steps and expected vs actual?',
+      'Any recent configuration or integration changes?',
+      'Timeframe—when first noticed? Consistent or intermittent?'
+    ]).forEach(q=>{ const li=document.createElement('li'); li.textContent=q; out.appendChild(li); });
+    const meta = $('#aiProbeMeta'); if(meta) meta.textContent='Generated locally (demo).';
+  }
+
+  // Bind CAV buttons
+  $('#btnSuggest')?.addEventListener('click', suggestRoute);
+  $('#btnClear')?.addEventListener('click', clearCav);
+  $('#btnAI')?.addEventListener('click', generateProbes);
+
+  // Start on Home
+  go('home');
 })();
-
-function tokenize(s){ return (s||'').toLowerCase().split(/[^a-z0-9]+/).filter(Boolean); }
-function suggestRoute(){
-  const modSel = el('modSelect'), sum = el('summary'), ul = el('probeList'), box = el('routeBox');
-  if(!modSel || !sum || !ul || !box) return;
-  const mod = modSel.value, summary = (sum.value||'').trim();
-  if(!summary){ alert('Please enter an issue summary.'); return; }
-  const toks = tokenize(summary);
-  const scored = routingRules.map(r=>({r, s: (r.module===mod?0.5:0)+toks.filter(t=>r.signals.includes(t)).length*0.1})).sort((a,b)=>b.s-a.s);
-  const top = scored[0]?.r;
-  if(!top){ box.textContent='No suggestion.'; return; }
-  box.innerHTML = `Recommended queue: <strong>${top.queue}</strong>`;
-  ul.innerHTML=''; (top.probing||[]).forEach(q=>{ const li=document.createElement('li'); li.textContent=q; ul.appendChild(li); });
-}
-function clearCav(){ if(el('summary')) el('summary').value=''; if(el('probeList')) el('probeList').innerHTML=''; if(el('routeBox')) el('routeBox').textContent='Fill the form and click Suggest queue.'; }
-
-// ---- init ----
-go('home');
 </script>
 </body>
 </html>
